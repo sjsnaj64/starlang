@@ -1,0 +1,229 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "星语",
+  "scopeName": "source.starlang",
+  "comment": "★ 这个文件是 生成语法.py 自动生成的，别手改。改词表请改 starlang.py",
+  "patterns": [
+    {
+      "include": "#注释"
+    },
+    {
+      "include": "#字符串"
+    },
+    {
+      "include": "#标号"
+    },
+    {
+      "include": "#数字"
+    },
+    {
+      "include": "#变量"
+    },
+    {
+      "include": "#关键字"
+    },
+    {
+      "include": "#内置函数"
+    },
+    {
+      "include": "#运算符"
+    }
+  ],
+  "repository": {
+    "注释": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.starlang",
+          "match": "#.*$",
+          "captures": {
+            "0": {
+              "patterns": [
+                {
+                  "name": "entity.name.tag.starlang",
+                  "match": "#@[\\p{L}\\p{N}_]+"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "字符串": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.starlang",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.starlang"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.starlang"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.starlang",
+              "match": "\\\\[ntr\\\\\"'0]|\\\\u[0-9a-fA-F]{4}|\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.starlang",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.starlang"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.starlang"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.starlang",
+              "match": "\\\\[ntr\\\\\"'0]|\\\\u[0-9a-fA-F]{4}|\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "标号": {
+      "patterns": [
+        {
+          "name": "entity.name.tag.starlang",
+          "match": "@[\\p{L}\\p{N}_]+"
+        }
+      ]
+    },
+    "数字": {
+      "patterns": [
+        {
+          "name": "constant.numeric.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])\\d+(?:\\.\\d+)?"
+        }
+      ]
+    },
+    "关键字": {
+      "patterns": [
+        {
+          "name": "keyword.control.exception.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:catch|try|错了|尝试|试试|出事|出错)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "keyword.control.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:continue|while|break|跳过这圈|loop|退出循环|then|else|下一圈|重复|只要|那么|否则|假如|继续|不然|打断|if|循环|如果|跳出|要是|则|若|当)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "keyword.other.elseif.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:elseif|elif|否则如果|不然如果|否则若)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "storage.type.function.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:function|lambda|return|匿名函数|func|lam|小函数|def|函数|fn|定义|回传|匿名|交回|返回)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "support.function.print.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:print|echo|显示|打印|输出|说)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "keyword.operator.word.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:not|and|而且|或者|并且|or|且|非|或)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "keyword.other.macro.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:insert|macro|tail|head|塞进去|插进去|标签|最后|末尾|插入|结尾|开头|最前|标号|开始|宏)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "keyword.other.hook.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:unregister|register|before|unhook|after|hook|拔掉|摘掉|挂上|注册|之前|之后|卸下|前|后)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "constant.language.boolean.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:nothing|什么都没有|false|true|null|nil|空值|假|真|空)(?![\\p{L}\\p{N}_])"
+        }
+      ]
+    },
+    "变量": {
+      "patterns": [
+        {
+          "begin": "(?<![\\p{L}\\p{N}_])(?:function|func|def|函数|fn|定义)(\\s+)([\\p{L}\\p{N}_]+)(\\s*)(\\()",
+          "beginCaptures": {
+            "0": {
+              "patterns": [
+                {
+                  "include": "#关键字"
+                }
+              ]
+            },
+            "2": {
+              "name": "entity.name.function.starlang"
+            },
+            "4": {
+              "name": "punctuation.definition.parameters.begin.starlang"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.parameters.end.starlang"
+            }
+          },
+          "patterns": [
+            {
+              "name": "variable.parameter.starlang",
+              "match": "[\\p{L}\\p{N}_]+"
+            }
+          ]
+        },
+        {
+          "comment": "x = 值 —— 左边是新造的变量",
+          "match": "^(\\s*)([\\p{L}\\p{N}_]+)(\\s*)=(?!=)",
+          "captures": {
+            "2": {
+              "name": "variable.other.assignment.starlang"
+            }
+          }
+        }
+      ]
+    },
+    "内置函数": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.starlang",
+          "match": "(?<![\\p{L}\\p{N}_])(?:readline|replace|readall|append|exists|values|trunc|isnum|write|slice|split|strip|lines|chars|range|read|idiv|文件在吗|push|join|type|keys|追加文件|int|div|写文件|读一行|按行分|是数字|len|has|去空白|字符们|读文件|pop|读全部|取整|换成|范围|长度|取段|键们|类型|追加|排成|整除|弹出|切分|值们|含有|读檔)(?![\\p{L}\\p{N}_])"
+        }
+      ]
+    },
+    "运算符": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.starlang",
+          "match": "==|!=|<=|>="
+        },
+        {
+          "name": "keyword.operator.arithmetic.starlang",
+          "match": "\\*\\*|[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.assignment.starlang",
+          "match": "(?<!<|>|!)=(?!=)"
+        },
+        {
+          "name": "keyword.operator.comparison.starlang",
+          "match": "<|>"
+        },
+        {
+          "name": "punctuation.separator.starlang",
+          "match": "[,\\[\\]{}():]"
+        }
+      ]
+    }
+  }
+}

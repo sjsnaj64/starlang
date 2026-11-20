@@ -1,0 +1,42 @@
+{
+  "name": "starlang",
+  "displayName": "星语 StarLang",
+  "description": "星语（StarLang）语法高亮、括号配对、注释、代码片段",
+  "version": "0.1.0",
+  "publisher": "starlang",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "starlang",
+        "aliases": [
+          "星语",
+          "StarLang",
+          "starlang"
+        ],
+        "extensions": [
+          ".star"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "starlang",
+        "scopeName": "source.starlang",
+        "path": "./syntaxes/starlang.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "starlang",
+        "path": "./snippets/starlang.json"
+      }
+    ]
+  }
+}

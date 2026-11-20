@@ -1,0 +1,88 @@
+{
+  "comments": {
+    "lineComment": "#"
+  },
+  "brackets": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ]
+  ],
+  "autoClosingPairs": [
+    {
+      "open": "{",
+      "close": "}"
+    },
+    {
+      "open": "[",
+      "close": "]"
+    },
+    {
+      "open": "(",
+      "close": ")"
+    },
+    {
+      "open": "\"",
+      "close": "\"",
+      "notIn": [
+        "string"
+      ]
+    },
+    {
+      "open": "'",
+      "close": "'",
+      "notIn": [
+        "string"
+      ]
+    }
+  ],
+  "surroundingPairs": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "\"",
+      "\""
+    ],
+    [
+      "'",
+      "'"
+    ]
+  ],
+  "wordPattern": "[\\p{L}\\p{N}_]+",
+  "indentationRules": {
+    "increaseIndentPattern": "\\{\\s*(?:#.*)?$|^\\s*(?:function|while|catch|loop|func|else|try|def|尝试|试试|重复|只要|fn|定义|错了|否则|假如|函数|不然|if|循环|如果|出事|出错|要是|若|当)(?![\\w])(?![^\\n]*\\{)",
+    "decreaseIndentPattern": "^\\s*(?:\\}|catch|else|错了|否则|不然|出事|出错)"
+  },
+  "onEnterRules": [
+    {
+      "beforeText": "^\\s*(?:function|while|catch|loop|func|else|try|def|尝试|试试|重复|只要|fn|定义|错了|否则|假如|函数|不然|if|循环|如果|出事|出错|要是|若|当)(?![\\w])(?![^\\n]*\\{).*$",
+      "action": {
+        "indent": "increaseIndent"
+      }
+    }
+  ],
+  "folding": {
+    "markers": {
+      "start": "^\\s*#\\s*region\\b",
+      "end": "^\\s*#\\s*endregion\\b"
+    }
+  }
+}
