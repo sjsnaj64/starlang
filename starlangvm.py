@@ -95,11 +95,13 @@ except Exception:
 class VM函数:
     """VM 里的函数值。★ 跟 starlang.Func 长得像，但 body 不是 AST，是入口地址。"""
 
-    def __init__(self, 名字, 参数, 入口, 闭包):
+    def __init__(self, 名字, 参数, 入口, 闭包, 最少=None):
         self.名字 = 名字
         self.参数 = list(参数)
         self.入口 = 入口
         self.闭包 = 闭包
+        # ★ 有默认值的参数可以不传；最少 = 前面没默认值的那些
+        self.最少 = len(self.参数) if 最少 is None else 最少
 
     def __repr__(self):
         return "<函数 " + self.名字 + "(" + ", ".join(self.参数) + ")>"
@@ -171,11 +173,13 @@ class 字节码编译器:
             #   JUMP 跳过整段，MAKE_FUNC 又只往栈上压一个函数值。
             跳过 = self.发("JUMP", None)
             入口 = self.这里()
+            默认们 = n[3] if len(n) > 3 else [None] * len(n[1])
             旧栈 = self.循环栈
             旧处理 = self.处理深度
             self.循环栈 = []
             self.处理深度 = 0
             try:
+                self.编默认参数(n[1], 默认们)
                 self.编块(n[2], False)
             finally:
                 self.循环栈 = 旧栈
@@ -183,7 +187,8 @@ class 字节码编译器:
             self.发("CONST", None)
             self.发("RETURN")
             self.回填(跳过, self.这里())
-            self.发("MAKE_FUNC", "<匿名>", tuple(n[1]), 入口)
+            最少 = sum(1 for d in 默认们 if d is None)
+            self.发("MAKE_FUNC", "<匿名>", tuple(n[1]), 入口, 最少)
             return
 
         if k == "var":
@@ -263,6 +268,26 @@ class 字节码编译器:
     def 编块(self, 块, 回显=False):
         for s in 块[1]:
             self.编句(s, 回显)
+
+    def 编默认参数(self, 参数们, 默认们):
+        """函数入口处：哪个参数拿到的是哨兵，就现算默认值塞回去。
+
+        ★ 为什么用哨兵而不是「这个参数没定义」？
+          因为 VM 调用时会把不够的实参统一补成哨兵 —— 这样入口处的检查
+          跟「参数到底传了几个」完全解耦，逻辑只写一遍。
+        ★ 哨兵必须用 is 判等（用 == 也行，因为 缺省值 没定义 __eq__，
+          但 is 更直白）。
+        """
+        for i, p in enumerate(参数们):
+            if 默认们[i] is None:
+                continue
+            self.发("LOAD", p)
+            self.发("CONST", starlang.缺省)
+            self.发("EQ")
+            跳过 = self.发("JUMP_IF_FALSE", None)
+            self.编式(默认们[i])
+            self.发("STORE", p)
+            self.回填(跳过, self.这里())
 
     def 跳出错误(self, s, 词):
         """跟 starlang.检查跳出() 一个字都不差 —— 三个实现的报错必须一致"""
@@ -353,23 +378,13 @@ class 字节码编译器:
                 #   是为了把这一圈也算进死循环熔断的计数里。
                 self.发("JUMP_BACK", 层["顶"])
 
-        elif k == "break":
-            if not self.循环栈:
-                raise SyntaxError(self.跳出错误(s, "跳出"))
-            位置 = self.发("JUMP", None)
-            self.循环栈[-1]["出口们"].append(位置)
-
-        elif k == "continue":
-            if not self.循环栈:
-                raise SyntaxError(self.跳出错误(s, "继续"))
-            # ★ 「继续」= 直接回跳。用 JUMP_BACK 而不是 JUMP，
-            #   是为了把这一圈也算进死循环熔断的计数里。
-            self.发("JUMP_BACK", self.循环栈[-1]["顶"])
-
         elif k == "funcdef":
             # ★ 先跳过函数体，再回头把入口地址打进 MAKE_FUNC
             跳过 = self.发("JUMP", None)
             入口 = self.这里()
+            默认们 = s[4] if len(s) > 4 else [None] * len(s[2])
+            # ★ 哨兵检查铺在函数体【最前面】—— 调用时没传的参数是哨兵
+            self.编默认参数(s[2], 默认们)
             旧栈 = self.循环栈
             旧处理 = self.处理深度
             self.循环栈 = []          # ★ 函数体里不能「跳出」到外面那层循环
@@ -382,7 +397,8 @@ class 字节码编译器:
             self.发("CONST", None)
             self.发("RETURN")
             self.回填(跳过, self.这里())
-            self.发("MAKE_FUNC", s[1], tuple(s[2]), 入口)
+            最少 = sum(1 for d in 默认们 if d is None)
+            self.发("MAKE_FUNC", s[1], tuple(s[2]), 入口, 最少)
             self.发("STORE", s[1])
 
         elif k == "return":
@@ -511,13 +527,14 @@ class VM:
         """★ 不看钩子表 —— 钩子自己再被套钩子就会没完没了。"""
         if not isinstance(f, VM函数):
             raise RuntimeError("星语：这个东西不是函数，不能加 () 调用它")
-        if len(实参) != len(f.参数):
-            raise RuntimeError(
-                "星语：函数「" + f.名字 + "」需要 " + str(len(f.参数))
-                + " 个参数，你给了 " + str(len(实参)) + " 个")
+        if not (f.最少 <= len(实参) <= len(f.参数)):
+            # ★ 跟解释器/编译器共用同一句
+            raise RuntimeError(starlang.参数个数消息(
+                f.名字, f.最少, len(f.参数), len(实参)))
         环境 = Environment(f.闭包)
-        for p, v in zip(f.参数, 实参):
-            环境.define(p, v)
+        for i, p in enumerate(f.参数):
+            # ★ 没传的给哨兵 —— 函数入口处的代码会把它换成默认值
+            环境.define(p, 实参[i] if i < len(实参) else starlang.缺省)
         return self.执行(f.入口, 环境)
 
     # ---------- 主循环 ----------
@@ -680,7 +697,8 @@ class VM:
 
                     # ---- 函数 ----
                     elif 操作 == "MAKE_FUNC":
-                        栈.append(VM函数(指令[1], 指令[2], 指令[3], 环境))
+                        栈.append(VM函数(指令[1], 指令[2], 指令[3], 环境,
+                                         指令[4] if len(指令) > 4 else None))
                     elif 操作 == "CALL":
                         n = 指令[1]
                         实参 = 栈[-n:] if n else []

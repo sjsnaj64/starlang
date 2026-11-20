@@ -160,7 +160,12 @@ def 式(n, 父优先=0):
         # ★ 打印成 匿名(x) { … } —— 花括号里缩进无所谓（词法器在花括号内
         #   不做缩进处理），所以这里固定用一层缩进就够了。
         #   体里的话得用 打印机 打，所以在这儿现场造个临时的（注释表空着）。
-        参 = ", ".join(安全名(p) for p in n[1])
+        默认们 = n[3] if len(n) > 3 else [None] * len(n[1])
+        件 = []
+        for i, p in enumerate(n[1]):
+            件.append(安全名(p) if 默认们[i] is None
+                      else 安全名(p) + " = " + 式(默认们[i]))
+        参 = ", ".join(件)
         临时 = 打印机({})
         临时.花括号里 = True      # ★ 体里的块全用 { } 写
         体行们 = []
@@ -319,7 +324,16 @@ class 打印机:
                 self.语句块(s[2], 层 + 1, 行们)
 
         elif k == "funcdef":
-            形参 = ", ".join(安全名(p) for p in s[2])
+            默认们 = s[4] if len(s) > 4 else None
+            if not isinstance(默认们, list):
+                # ★ 兵不厌诈：万一上游给了 None 或别的，就当「没默认值」处理，
+                #   别让一个字段缺失把整个工具搞崩。
+                默认们 = [None] * len(s[2])
+            件 = []
+            for i, p in enumerate(s[2]):
+                件.append(安全名(p) if 默认们[i] is None
+                          else 安全名(p) + " = " + 式(默认们[i]))
+            形参 = ", ".join(件)
             if self.花括号里:
                 行们.append(缩 + "定义 " + 安全名(s[1]) + "(" + 形参 + ") {")
                 self.语句块(s[3], 层 + 1, 行们)

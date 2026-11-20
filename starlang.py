@@ -24,6 +24,8 @@
           —— 高阶函数终于不用先起个名字了
  Step 17：三元表达式 + 复合赋值 + 自定义比较器排序 ✔
           —— 如果 条件 则 A 否则 B 能当值用；点 += 1；排序按(表, 比较器)
+ Step 18：默认参数 定义 f(a, b = 5) ✔
+          —— 而且默认值是【每次调用重算】，不是定义时冻住（跟 Python 相反）
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -1061,16 +1063,45 @@ class Parser:
         name = self.advance().value
 
         self.expect("(")
-        params = []
-        if self.cur.kind != ")":
-            params.append(self.expect("NAME").value)
-            while self.cur.kind == ",":
-                self.advance()
-                params.append(self.expect("NAME").value)
+        params, 默认们 = self.参数表()
         self.expect(")")
 
         body = self.block()
-        return ("funcdef", name, params, body)
+        return ("funcdef", name, params, body, 默认们)
+
+    def 参数表(self):
+        """读 (a, b = 表达式, …) 里面的东西，返回 (参数名们, 默认值节点们)。
+
+        ★ 带默认值的参数必须排在最后 —— 跟 Python 一个规矩。
+          不这么要求的话，调用时就无法区分「少传的那个是哪一个」。
+        """
+        params = []
+        默认们 = []
+        见过默认 = False
+        if self.cur.kind == ")":
+            return params, 默认们
+        while True:
+            if self.cur.kind != "NAME":
+                raise SyntaxError(
+                    f"[语法错误] 第 {self.cur.line} 行: 参数得是名字，"
+                    f"实际读到 {self.cur.kind!r}")
+            名 = self.advance().value
+            if self.cur.kind == "=":
+                self.advance()
+                默认们.append(self.expression())
+                见过默认 = True
+            else:
+                if 见过默认:
+                    raise SyntaxError(
+                        f"[语法错误] 第 {self.cur.line} 行: 参数「{名}」前面已经有"
+                        f"带默认值的参数了 —— 带默认值的必须放最后")
+                默认们.append(None)
+            params.append(名)
+            if self.cur.kind == ",":
+                self.advance()
+                continue
+            break
+        return params, 默认们
 
     def return_statement(self):
         self.advance()                         # 吃掉 返回 / return
@@ -1405,21 +1436,9 @@ class Parser:
         """
         self.advance()                        # 吃掉 匿名 / lambda
         self.expect("(")
-        参数们 = []
-        while self.cur.kind != ")":
-            if self.cur.kind != "NAME":
-                raise SyntaxError(
-                    f"[语法错误] 第 {self.cur.line} 行: 匿名函数的参数得是名字，"
-                    f"实际读到 {self.cur.kind!r}")
-            参数们.append(self.cur.value)
-            self.advance()
-            if self.cur.kind == ",":
-                self.advance()
-            elif self.cur.kind != ")":
-                raise SyntaxError(
-                    f"[语法错误] 第 {self.cur.line} 行: 参数之间要用逗号隔开")
+        参数们, 默认们 = self.参数表()
         self.expect(")")
-        return ("lambda", 参数们, self.block())
+        return ("lambda", 参数们, self.block(), 默认们)
 
     def 三元式(self):
         """如果 条件 则 甲 否则 乙 —— 能直接当值用，不必拆成语句。
@@ -1540,14 +1559,50 @@ class Environment:
         return value
 
 
+class 缺省值:
+    """「这个参数没传」的哨兵。
+
+    ★ 为什么不用 None？因为【空】也是合法的默认值：
+         定义 f(x = 空) { … }
+      用 None 当哨兵的话，「传了空」和「没传」就分不清了。
+    ★ 为什么不用 0 或 ""？一个道理。伪哨兵必须是不可能与真值撞车的对象。
+    """
+
+    def __repr__(self):
+        return "<缺省>"
+
+
+缺省 = 缺省值()          # 全局就这一个实例，靠 is 判等
+
+
+def 参数个数消息(名字, 最少, 最多, 给了):
+    """★ 三个实现共用这一句 —— 参数个数报错必须一字不差"""
+    要 = str(最少) if 最少 == 最多 else str(最少) + "~" + str(最多)
+    return ("星语：函数「" + 名字 + "」需要 " + 要 + " 个参数，你给了 "
+            + str(给了) + " 个")
+
+
 class Func:
     """一个星语函数。注意 closure 这个字段 —— 它就是「闭包」"""
 
-    def __init__(self, name, params, body, closure):
+    def __init__(self, name, params, body, closure, defaults=None):
         self.name = name
         self.params = params
         self.body = body            # ("block", [语句...])
         self.closure = closure      # ★ 定义它时的那个环境！函数会一直记得
+        # ★ Step 18：默认参数。存的是【表达式节点】，不是值 ——
+        #   所以「每次调用都重新算一遍」，而不是定义时算一次就冻住。
+        #   （Python 就是定义时算的，于是有了那个著名的 追加(表, 默认=[]) 坑）
+        self.defaults = list(defaults) if defaults else [None] * len(params)
+
+    @property
+    def 最少参数(self):
+        """有默认值的可以不传 —— 但前面的必须全传"""
+        n = 0
+        for d in self.defaults:
+            if d is None:
+                n += 1
+        return n
 
 
 class 内建:
@@ -2230,8 +2285,14 @@ def 展开所有宏(语句们):
             结果.extend(展开所有宏(展开))        # 宏里还有宏 → 继续
 
         elif k == "funcdef":
+            # ⚠️ 重建节点时【每个字段都得搬】—— 忘了搬 s[4]（默认参数）
+            #    就会变成「定义时明明写了默认值，调用时却说要 N 个参数」。
+            #    这就是「重建 AST 一定要把新字段补上」的经典翻车现场。
+            #    ★ 补齐时必须补【列表】不是 None —— 下游会直接下标访问。
             结果.append(搬行号(s, ("funcdef", s[1], s[2],
-                                 ("block", 展开所有宏(s[3][1])))))
+                                 ("block", 展开所有宏(s[3][1])),
+                                 s[4] if len(s) > 4 and s[4] is not None
+                                 else [None] * len(s[2]))))
 
         elif k == "block":
             结果.append(搬行号(s, ("block", 展开所有宏(s[1]))))
@@ -2266,16 +2327,22 @@ def 展开所有宏(语句们):
 def 调函数(f, 实参):
     """真止调一个函数。★ 这个函数【不看钩子表】——
     正因为如此，钩子自己不会再被套一层，不会无端递归。"""
-    if len(实参) != len(f.params):
-        raise RuntimeError(
-            "星语：函数「" + f.name + "」需要 " + str(len(f.params))
-            + " 个参数，你给了 " + str(len(实参)) + " 个"
-        )
+    最少 = f.最少参数
+    if not (最少 <= len(实参) <= len(f.params)):
+        raise RuntimeError(参数个数消息(f.name, 最少, len(f.params), len(实参)))
     # ★ 核心：新环境的爸爸，是「函数定义时的环境」—— 不是调用处的环境！
     #   这一个选择，就决定了它是「词法作用域」，也决定了闭包能不能用。
     新环境 = Environment(f.closure)
-    for p, v in zip(f.params, 实参):
-        新环境.define(p, v)                # 参数直接住进这一层
+    for i, p in enumerate(f.params):
+        值 = 实参[i] if i < len(实参) else 缺省
+        if 值 is 缺省:
+            # ★ 在【新环境】里算默认值，不是在 closure 里 ——
+            #   这样默认值能引用【前面的参数】：
+            #       定义 长方形(宽, 高 = 宽)
+            #   前面已经 define 进新环境了，所以「宽」读得到。
+            #   ★ 又因为每次调用都新建一个环境，所以默认值自然「每次重算」。
+            值 = evaluate(f.defaults[i], 新环境)
+        新环境.define(p, 值)                # 参数直接住进这一层
     try:
         execute(f.body, 新环境)
         return None                        # 没碰到「返回」→ 返回空
@@ -2333,7 +2400,8 @@ def evaluate(node, env):
         # ★ 就是造个 Func 而已 —— 匿名函数跟具名函数在运行时没有半点区别，
         #   区别只在「这个名字有没有人叫得出来」。
         #   核心是 closure 传当前环境 —— 所以匿名函数也能当闭包用。
-        return Func("<匿名>", node[1], node[2], env)
+        默认们 = node[3] if len(node) > 3 else None
+        return Func("<匿名>", node[1], node[2], env, 默认们)
     if kind == "ternary":                    # Step 17：三元表达式
         if truthy(evaluate(node[1], env)):
             return evaluate(node[2], env)
@@ -2579,7 +2647,8 @@ def execute(stmt, env):
     # ---- 函数（Step 4 新增）----
     if kind == "funcdef":
         # ★ 关键：把「当前环境」打包进去一起存起来 —— 这就是闭包
-        env.define(stmt[1], Func(stmt[1], stmt[2], stmt[3], env))
+        默认们 = stmt[4] if len(stmt) > 4 else None
+        env.define(stmt[1], Func(stmt[1], stmt[2], stmt[3], env, 默认们))
         return None
 
     if kind == "return":

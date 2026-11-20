@@ -91,6 +91,13 @@ def 扫描语句(域, s):
     elif k == "assign":
         域.赋值.add(s[1])
 
+    elif k == "opassign":
+        # ★ x += 1 也是「写」，必须跟 assign 一样记账。
+        #   漏了这条，函数里的 `计数 += 1` 会被 Python 当成局部变量
+        #   （因为生成了「计数 = 计数 + 1」），然后报 UnboundLocalError ——
+        #   而解释器那边是正常的，差分测试立刻抓包。
+        域.赋值.add(s[1])
+
     elif k == "block":
         扫描(域, s[1])
 
@@ -207,18 +214,30 @@ class 编译器:
             #   Python 的 lambda 只能装一个表达式 —— 装不下 返回/如果/只要。
             实现 = self.新名("匿实现")
             包名 = self.新名("匿")
-            形参 = ", ".join(py名(p) for p in n[1])
+            默认们 = n[3] if len(n) > 3 else [None] * len(n[1])
+            形参件 = []
+            for i, p in enumerate(n[1]):
+                形参件.append(py名(p) if 默认们[i] is None
+                              else py名(p) + "=_缺省")
             开头 = len(self.行)
-            self.写("def " + 实现 + "(" + 形参 + "):")
+            self.写("def " + 实现 + "(" + ", ".join(形参件) + "):")
             旧循环 = self.循环深度
             self.循环深度 = 0          # 匿名函数体里不能 跳出 到外面
             self.深 += 1
+            for i, p in enumerate(n[1]):
+                if 默认们[i] is None:
+                    continue
+                self.写("if " + py名(p) + " is _缺省:")
+                self.深 += 1
+                self.写(py名(p) + " = " + self.式(默认们[i]))
+                self.深 -= 1
             self.语句表(n[2][1])
             self.深 -= 1
             self.循环深度 = 旧循环
             # ★ 包装成 _函数，这样 _调() 认得它是个星语函数（带名字显示）
+            最少 = sum(1 for d in 默认们 if d is None)
             self.写(包名 + " = _函数(\"<匿名>\", " + repr(list(n[1]))
-                    + ", " + 实现 + ")")
+                    + ", " + 实现 + ", " + str(最少) + ")")
             段 = self.行[开头:]
             del self.行[开头:]
             # 先攒着 —— 后面可能还有内层匿名函数，让它们先排前面
@@ -445,30 +464,58 @@ class 编译器:
             raise RuntimeError("星语编译器：不认识的语句节点 " + repr(k))
 
     # ---------- 函数定义 ----------
-    def 编译函数定义(self, s):
+    def 编译函数定义(self, s, 匿名名=None):
         名, 参数, 体 = s[1], s[2], s[3]
+        默认们 = s[4] if len(s) > 4 else [None] * len(参数)
         实现 = self.新名("实现")
+        外层深 = self.深          # ← 这条语句本身所在的层
 
         # ★ 星语的函数是「值」，要能被传来传去、被打印成 <函数 f(x)>，
         #   所以生成两层：一层是真 Python 函数（闭包照旧），一层是包壳。
-        形参 = ", ".join(py名(p) for p in 参数)
-        self.写("def " + 实现 + "(" + 形参 + "):")
+        #
+        # ★★ 默认值为什么不用 Python 自己的 `def f(a=表达式)`？
+        #   Python 在【定义时】算一次就冻住了 —— 著名的 `def f(x=[])` 坑。
+        #   星语的语义是【每次调用重算】。所以形参默认值先给哨兵，
+        #   进函数体再判哨兵、现算 —— 这样两边语义才能对齐。
+        形参件 = []
+        for i, p in enumerate(参数):
+            形参件.append(py名(p) if 默认们[i] is None
+                          else py名(p) + "=_缺省")
+        self.写("def " + 实现 + "(" + ", ".join(形参件) + "):")
 
         旧域 = self.当前
         旧循环 = self.循环深度
         self.循环深度 = 0        # ★ 函数体里不算外层循环（break 不能穿函数）
-        self.当前 = self.找子域(名, len(参数))
+        self.当前 = self.找子域(名, len(参数)) if 匿名名 is None else None
         self.深 += 1
         if self.当前 is not None:
             for 外名 in sorted(self.当前.外层):
                 self.写("nonlocal " + py名(外名))
+        # ★ 哨兵检查必须在函数体【最前面】—— 函数体里马上就会用到这些参数
+        for i, p in enumerate(参数):
+            if 默认们[i] is None:
+                continue
+            self.写("if " + py名(p) + " is _缺省:")
+            self.深 += 1
+            # ★★ 生成默认值表达式时，把 self.深 临时退回「语句所在层」。
+            #   为什么？因为表达式里可能藏着匿名函数，而它的 def 会被
+            #   提到【本语句开头】去（见 待补 机制）——那里是外层缩进。
+            #   不退回的话，def 会按「函数体内」的缩进写出来，
+            #   插到外层就变成 unexpected indent。（demo23 就是这么炸的）
+            内层深 = self.深
+            self.深 = 外层深
+            值代码 = self.式(默认们[i])
+            self.深 = 内层深
+            self.写(py名(p) + " = " + 值代码)
+            self.深 -= 1
         self.语句表(体[1])
         self.深 -= 1
         self.当前 = 旧域
         self.循环深度 = 旧循环
 
+        最少 = sum(1 for d in 默认们 if d is None)
         self.写(py名(名) + " = _函数(" + repr(名) + ", " + repr(list(参数))
-                + ", " + 实现 + ")")
+                + ", " + 实现 + ", " + str(最少) + ")")
 
     def 找子域(self, 名, 参数个数):
         """按 (名字, 参数个数) 从当前域的子里挑 —— 同名重定义时会挑到第一个，无所谓。"""
@@ -514,12 +561,14 @@ import re
 
 
 class _函数:
-    __slots__ = ("名字", "参数", "实现")
+    __slots__ = ("名字", "参数", "实现", "最少")
 
-    def __init__(self, 名字, 参数, 实现):
+    def __init__(self, 名字, 参数, 实现, 最少=None):
         self.名字 = 名字
-        self.参数 = 参数
+        self.参数 = list(参数)
         self.实现 = 实现
+        # 有默认值的参数可以不传，但前面的必须全传
+        self.最少 = len(self.参数) if 最少 is None else 最少
 
     def __repr__(self):
         return "<函数 " + self.名字 + "(" + ", ".join(self.参数) + ")>"
@@ -560,10 +609,13 @@ def _拔掉(时机, 目标名, 目标, 钩子):
 def _直调(f, 实参):
     if not isinstance(f, _函数):
         raise RuntimeError("星语：这个东西不是函数，不能加 () 调用它")
-    if len(实参) != len(f.参数):
-        raise RuntimeError("星语：函数「" + f.名字 + "」需要 " + str(len(f.参数))
-                           + " 个参数，你给了 " + str(len(实参)) + " 个")
-    return f.实现(*实参)
+    if not (f.最少 <= len(实参) <= len(f.参数)):
+        # ★ 跟解释器/VM 共用同一句，否则同一个错误三家说法又不一样了
+        raise RuntimeError(_sl.参数个数消息(
+            f.名字, f.最少, len(f.参数), len(实参)))
+    # ★ 不足的用哨兵补上，实现体开头会把哨兵换成默认值
+    补 = list(实参) + [_缺省] * (len(f.参数) - len(实参))
+    return f.实现(*补)
 
 
 def _调(f, 实参):
@@ -749,6 +801,9 @@ def _fmt(v):
 # ---- 内建函数：直接把 starlang.py 里那套搬过来，行为完全一致 ----
 import starlang as _sl
 _内建实现 = _sl.内建函数
+# ★ 默认参数的哨兵直接借解释器那个单例 —— 两边共用同一个对象，
+#   所以 is 判等不会出错。
+_缺省 = _sl.缺省
 '''
 
 
