@@ -21,6 +21,15 @@ import os
 import re
 import sys
 
+# ★ 这个脚本不 import starlang，所以拿不到 starlang.py 里那次 stdout 重设。
+#   Windows 默认 GBK，一打印 ✅ 就 UnicodeEncodeError，后面的输出全没 ——
+#   看起来就像「终端把输出吃掉了」。自己补上。
+for _流 in (sys.stdout, sys.stderr):
+    try:
+        _流.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 本目录 = os.path.dirname(os.path.abspath(__file__))
 语法路径 = os.path.join(本目录, "syntaxes", "starlang.tmLanguage.json")
 
