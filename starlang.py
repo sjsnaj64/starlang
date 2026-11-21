@@ -48,6 +48,11 @@
              m.取("加税")(100)            → 106 （星语函数给 Python 调）
              m.给("打招呼", 某个lambda)   → 星语里直接 打招呼("世界")
              两边的值本来就是同一批对象，所以「来回搬」也不需要转换
+ Step 25：标准库补课 —— 随机数 / 四舍五入 / 时间 / 删键 ✔
+          —— 随机数用纯星语 LCG（整数运算）写，同一种子三家算出同一串，
+             所以它【能进差分测试】；换成 Python 的 random 就永远对不上
+          —— 四舍五入走 Decimal，2.5 进到 3（不是 Python round 的银行家舍入）
+          —— 时间那几条内置（纯星语拿不到系统时钟），不确定，demo 里只验形状
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -2089,6 +2094,130 @@ def _取整(实参):
     return int(v)
 
 
+# ═══════════════════════════════════════════════════════════
+#  Step 25：标准库补课 —— 四舍五入 / 时间 / 删键
+# ═══════════════════════════════════════════════════════════
+# ★ 为什么 四舍五入 不用 Python 的 round()？
+#   因为 round() 是「四舍六入五成双」（银行家舍入）：
+#       round(2.5) == 2      ← 用户会以为坏了
+#       round(3.5) == 4
+#   星语说「四舍五入」就得是四舍五入，2.5 必须进到 3。
+#   要圆得准还得走 Decimal —— 二进制浮点的 2.675 其实略小于 2.675，
+#   直接用 floor(x*100+0.5)/100 会得到 2.67。
+# ===============================================================
+
+def _四舍五入(实参):
+    """四舍五入到指定小数位（默认 0 位）。
+
+        四舍五入(2.5)      -> 3
+        四舍五入(2.4)      -> 2
+        四舍五入(2.675, 2) -> 2.68      ← Decimal 兜底，浮点误差坑不到
+        四舍五入(-2.5)     -> -3        ← 离零更远，跟 取整 的规矩不冲突
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+
+    _要参数("四舍五入", 实参, 1, 2)
+    值 = 实参[0]
+    位 = 实参[1] if len(实参) > 1 else 0
+    if isinstance(值, bool) or not isinstance(值, (int, float)):
+        raise RuntimeError("星语：四舍五入() 只收数字，你给了 " + fmt(值))
+    if isinstance(位, bool) or not isinstance(位, int):
+        raise RuntimeError("星语：四舍五入() 的位数得是整数，你给了 " + fmt(位))
+
+    # ★ str(值) 而不是 Decimal(值)：Decimal(2.675) 会把浮点误差一起带进来，
+    #   而 str(2.675) 是 "2.675" —— 用户看到的那个数。
+    精确 = Decimal(str(值)).quantize(Decimal(1).scaleb(-位),
+                                     rounding=ROUND_HALF_UP)
+    return int(精确) if 位 == 0 else float(精确)
+
+
+# ---- 时间（★ 这几条是【不确定】的，差分测试别去生成它们）----
+#   为什么还是内置而不是塞进标准库.star？
+#   纯星语拿不到系统时钟 —— 语言层面没有「现在几点」这种能力的来源。
+
+def _现在(实参):
+    """当前时间戳（1970 年到现在多少秒，带小数）。"""
+    _要参数("现在", 实参, 0)
+    import time
+    return time.time()
+
+
+def _今天(实参):
+    """今天的日期，"2026-11-21" 这种样子。"""
+    _要参数("今天", 实参, 0)
+    import datetime
+    return datetime.date.today().isoformat()
+
+
+def _现在时刻(实参):
+    """当前的时分秒，"15:30:00"。"""
+    _要参数("现在时刻", 实参, 0)
+    import datetime
+    return datetime.datetime.now().strftime("%H:%M:%S")
+
+
+def _当前日期时间(实参):
+    """当前的完整日期时间，"2026-11-21 15:30:00"。"""
+    _要参数("当前日期时间", 实参, 0)
+    import datetime
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _格式化时间(实参):
+    """把一个时间戳按格式排出来。
+
+        格式化时间(现在(), "%Y年%m月%d日 %H:%M")   → 2026年11月21日 15:30
+    ★ 格式串是 Python strftime 那套（%Y 年 %m 月 %d 日 %H 时 %M 分 %S 秒）
+    """
+    _要参数("格式化时间", 实参, 2)
+    秒, 格式 = 实参
+    if isinstance(秒, bool) or not isinstance(秒, (int, float)):
+        raise RuntimeError("星语：格式化时间() 第一个参数得是时间戳（数字），你给了 "
+                           + fmt(秒))
+    if not isinstance(格式, str):
+        raise RuntimeError("星语：格式化时间() 第二个参数得是格式文本，你给了 "
+                           + fmt(格式))
+    import datetime
+    try:
+        return datetime.datetime.fromtimestamp(秒).strftime(格式)
+    except (OSError, ValueError, OverflowError) as e:
+        raise RuntimeError("星语：格式化时间() 排不出来 —— " + str(e)) from None
+
+
+def _时间戳(实参):
+    """把年月日时秒拼成时间戳。
+
+        时间戳(2026, 11, 21)              → 当天 0 点
+        时间戳(2026, 11, 21, 15, 30, 0)   → 当天 15:30
+    """
+    _要参数("时间戳", 实参, 3, 6)
+    件 = list(实参) + [0] * (6 - len(实参))
+    for v in 件:
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise RuntimeError("星语：时间戳() 的参数都得是整数，里面有 "
+                               + fmt(v))
+    import datetime
+    try:
+        return datetime.datetime(*件).timestamp()
+    except ValueError as e:
+        raise RuntimeError("星语：时间戳() 这个日期不存在 —— " + str(e)) from None
+
+
+def _删键(实参):
+    """从字典里删掉一个键，返回被删掉的值。
+
+    ★ 为什么要有它：星语没有 `del`，而清一个配置/删一条记录是很常见的动作。
+      键不存在就直说 —— 默默什么都不做，调试时找不到北。
+    """
+    _要参数("删键", 实参, 2)
+    字典, 键 = 实参
+    if not isinstance(字典, dict):
+        raise RuntimeError("星语：删键() 只收字典，你给了 " + fmt(字典))
+    if 键 not in 字典:
+        raise RuntimeError("星语：字典里没有「" + str(键) + "」这个键，删不了")
+    return 字典.pop(键)
+
+
 内建函数 = {
     "长度": _长度, "len": _长度,
     "追加": _追加, "push": _追加,
@@ -2114,6 +2243,15 @@ def _取整(实参):
     "读全部": _读全部, "readall": _读全部,
     "整除": _整除, "div": _整除, "idiv": _整除,
     "取整": _取整, "int": _取整, "trunc": _取整,
+    # ---- Step 25：四舍五入 / 时间 / 删键 ----
+    "四舍五入": _四舍五入, "round": _四舍五入,
+    "现在": _现在, "now": _现在,
+    "今天": _今天, "today": _今天,
+    "现在时刻": _现在时刻, "nowtime": _现在时刻,
+    "当前日期时间": _当前日期时间, "datetimenow": _当前日期时间,
+    "格式化时间": _格式化时间, "strftime": _格式化时间,
+    "时间戳": _时间戳, "mktime": _时间戳,
+    "删键": _删键, "delkey": _删键,
 }
 
 

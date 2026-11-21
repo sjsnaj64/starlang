@@ -117,35 +117,35 @@
       "patterns": [
         {
           "name": "keyword.control.exception.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:catch|try|试试|出错|尝试|出事|错了)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:catch|try|尝试|试试|出错|出事|错了)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.control.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:continue|break|while|else|loop|跳过这圈|then|退出循环|下一圈|for|逐个|不然|继续|if|如果|假如|打断|否则|只要|循环|in|重复|要是|那么|跳出|遍历|对于|若|在|于|则|当)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:continue|while|break|跳过这圈|else|退出循环|then|loop|下一圈|for|否则|不然|重复|那么|遍历|in|if|只要|假如|打断|跳出|继续|逐个|对于|循环|要是|如果|若|则|于|在|当)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.other.elseif.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:elseif|不然如果|否则如果|elif|否则若)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:elseif|否则如果|不然如果|elif|否则若)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "storage.type.function.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:function|return|lambda|匿名函数|func|lam|def|小函数|回传|返回|匿名|定义|交回|函数|fn)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:function|return|lambda|func|匿名函数|lam|小函数|def|函数|交回|返回|匿名|定义|回传|fn)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "support.function.print.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:print|echo|输出|打印|显示|说)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:print|echo|输出|显示|打印|说)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.operator.word.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:and|not|or|并且|或者|而且|非|且|或)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:and|not|并且|而且|或者|or|非|或|且)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.other.macro.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:insert|macro|head|tail|插进去|塞进去|最后|末尾|标签|标号|最前|开头|开始|插入|结尾|宏)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:insert|macro|head|tail|插进去|塞进去|末尾|最后|结尾|开始|插入|标号|标签|最前|开头|宏)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.other.hook.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:unregister|register|unhook|before|after|hook|之后|注册|摘掉|之前|卸下|挂上|拔掉|后|前)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:unregister|register|before|unhook|after|hook|挂上|注册|拔掉|摘掉|之后|之前|卸下|后|前)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.other.preprocess.starlang",
@@ -160,7 +160,7 @@
     "变量": {
       "patterns": [
         {
-          "begin": "(?<![\\p{L}\\p{N}_])(?:function|func|def|定义|函数|fn)(\\s+)([\\p{L}\\p{N}_]+)(\\s*)(\\()",
+          "begin": "(?<![\\p{L}\\p{N}_])(?:function|func|def|函数|定义|fn)(\\s+)([\\p{L}\\p{N}_]+)(\\s*)(\\()",
           "beginCaptures": {
             "0": {
               "patterns": [
@@ -204,7 +204,7 @@
       "patterns": [
         {
           "name": "support.function.builtin.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:readline|replace|readall|append|exists|values|trunc|chars|isnum|write|range|lines|split|slice|strip|文件在吗|join|read|type|追加文件|push|idiv|keys|div|按行分|字符们|读一行|去空白|len|写文件|是数字|has|读文件|pop|int|读全部|弹出|类型|含有|键们|范围|追加|读檔|取整|排成|整除|换成|取段|长度|值们|切分)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:datetimenow|readline|strftime|readall|nowtime|replace|exists|delkey|values|append|mktime|当前日期时间|isnum|trunc|lines|today|slice|格式化时间|split|chars|range|round|write|strip|idiv|追加文件|join|keys|read|push|文件在吗|现在时刻|type|四舍五入|是数字|读全部|读文件|pop|时间戳|has|按行分|字符们|读一行|写文件|去空白|len|div|int|now|整除|切分|取段|取整|追加|排成|键们|弹出|值们|今天|长度|类型|读檔|删键|范围|换成|含有|现在)(?![\\p{L}\\p{N}_])"
         }
       ]
     },
