@@ -343,7 +343,7 @@ class 编译器:
         k = s[0]
 
         if k == "print":
-            self.写("print('   ' + _fmt(" + self.式(s[1]) + "))")
+            self.写("print(_fmt(" + self.式(s[1]) + "))")
 
         elif k == "assign":
             self.写(py名(s[1]) + " = " + self.式(s[2]))

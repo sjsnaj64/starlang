@@ -846,7 +846,7 @@ class VM:
 
                     # ---- 杂项 ----
                     elif 操作 == "PRINT":
-                        print("   " + fmt(栈.pop()))
+                        print(fmt(栈.pop()))
                     elif 操作 == "PRINT_EXPR":
                         值 = 栈.pop()
                         if 值 is not None:
