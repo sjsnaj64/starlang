@@ -205,6 +205,9 @@ class 编译器:
             return "True" if n[1] else "False"
         if k == "null":
             return "None"
+        if k == "已值":
+            # ★ 内部专用：n[1] 存的是【已经算好的 Python 变量名】
+            return n[1]
         if k == "ternary":
             # Python 的三元就是 a if cond else b —— 直接对上了，不用搞跳转
             return ("(" + self.式(n[2]) + " if _真(" + self.式(n[1])
@@ -347,6 +350,18 @@ class 编译器:
         elif k == "setindex":
             self.写("_设下标(" + self.式(s[1]) + ", " + self.式(s[2])
                     + ", " + self.式(s[3]) + ")")
+
+        elif k == "setindexop":
+            # ★ 容器和下标各求值【一次】，存到临时变量里再用。
+            #   不存的话表达式会被写两遍，有副作用时行为全乱。
+            容 = self.新名("容")
+            位 = self.新名("位")
+            旧 = self.新名("旧")
+            self.写(容 + " = " + self.式(s[1]))
+            self.写(位 + " = " + self.式(s[2]))
+            self.写(旧 + " = _下标(" + 容 + ", " + 位 + ")")
+            self.写("_设下标(" + 容 + ", " + 位 + ", "
+                    + self.式((s[3], ("已值", 旧), s[4])) + ")")
 
         elif k == "expr":
             # ★ 解释器是 if result is not None 才打印 —— 所以函数没返回值（None）

@@ -29,6 +29,8 @@
  Step 19：遍历循环 遍历 项 于 表 ✔
           —— 不用再手写「点 = 0 / 只要 点 < 长度 / 点 += 1」三件套；
              还自带快照（边遍历边改容器不会乱）
+ Step 20：下标复合赋值 表[i] += 1 ✔
+          —— 容器和下标只求值【一次】（表里()[0] += 1 不会调两次）
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -691,6 +693,7 @@ def 速查表():
     print("  ── 运算符 ──")
     print("    +  -  *  /  %  **        ==  !=  <  >  <=  >=")
     print("    = 赋值                  [ ] 列表    [键: 值] 字典    列表[0] 取下标")
+    print("    += -= *= /= %= 复合赋值          遍历 项 于 表 / 字典")
     print("    # 注释                  @标号        \"文本\" / '文本'")
 
     print()
@@ -987,11 +990,18 @@ class Parser:
         if t.kind == "{":
             return self.block()
 
-        # --- 表达式语句（顺便接住 a[0] = 值 这种下标赋值）---
+        # --- 表达式语句（顺便接住 a[0] = 值 / a[0] += 1 这种下标赋值）---
         节点 = self.expression()
         if self.cur.kind == "=" and 节点[0] == "index":
             self.advance()
             return ("setindex", 节点[1], 节点[2], self.expression())
+        # ★ Step 20：下标复合赋值 表[i] += 1
+        #   跟普通变量复合赋值一个道理，只是「写回哪里」多了个下标。
+        if self.cur.kind in ("+=", "-=", "*=", "/=", "%=") \
+                and 节点[0] == "index":
+            运算 = self.cur.kind[0]
+            self.advance()
+            return ("setindexop", 节点[1], 节点[2], 运算, self.expression())
         return ("expr", 节点)
 
     # ---------- 块与控制流（Step 3 新增）----------
@@ -2455,6 +2465,12 @@ def evaluate(node, env):
         if truthy(evaluate(node[1], env)):
             return evaluate(node[2], env)
         return evaluate(node[3], env)
+    if kind == "已值":                       # ★ 内部专用：已经算好的值
+        # 只给「下标复合赋值」用：它要「先算旧值，再拿旧值参与运算」，
+        # 但又不能把容器/下标表达式再算一遍（有副作用时三家就对不上了）。
+        # 所以先把旧值包成这个节点，交给普通二元运算去处理。
+        # 解析器永远不会造出这种节点，用户也写不出来。
+        return node[1]
     if kind == "var":
         try:
             return env.get(node[1])          # ← Step 2：去环境里把值捞出来
@@ -2653,6 +2669,25 @@ def execute(stmt, env):
         #   顶层不该回显一个「= 15」。编译器/VM 那边天生不回显，
         #   这里要是把 set() 的返回值漏出去，差分测试立刻抓包。
         return None
+
+    # ---- 下标复合赋值（Step 20 新增）表[i] += 1 ----
+    if kind == "setindexop":
+        # ★ 容器和下标只能求值【一次】。
+        #   写成 evaluate((运, ("index", s[1], s[2]), s[4])) 会把它们算两遍 ——
+        #   万一里面是函数调用（表里()[0] += 1），就会调两次，
+        #   而编译器/VM 只调一次，三家立刻对不上。
+        容器 = evaluate(stmt[1], env)
+        下标 = evaluate(stmt[2], env)
+        旧值 = 取下标(容器, 下标)     # 顺便把「越界/类型不对」的检查也复用了
+        新值 = evaluate((stmt[3], ("已值", 旧值), stmt[4]), env)
+        # 写回 —— 跟 setindex 用同一套规矩（字典任意键，列表要正规下标）
+        if isinstance(容器, dict):
+            容器[下标] = 新值
+            return None
+        if isinstance(容器, list):
+            容器[_正规下标(容器, 下标)] = 新值
+            return None
+        raise RuntimeError("星语：" + fmt(容器) + " 这东西不能用 [] 改内容")
 
     # ---- 块与控制流（Step 3 新增）----
     if kind == "block":

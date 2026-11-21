@@ -269,6 +269,10 @@ class 打印机:
         elif k == "setindex":
             行们.append(缩 + 式(s[1]) + "[" + 式(s[2]) + "] = " + 式(s[3]) + 尾)
 
+        elif k == "setindexop":
+            行们.append(缩 + 式(s[1]) + "[" + 式(s[2]) + "] " + s[3] + "= "
+                       + 式(s[4]) + 尾)
+
         elif k == "expr":
             行们.append(缩 + 式(s[1]) + 尾)
 
