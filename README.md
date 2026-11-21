@@ -207,7 +207,7 @@ print(m.取("加税")(100))            # 106.0
 ## 怎么跑
 
 ```powershell
-git clone <本仓库>
+git clone https://github.com/sjsnaj64/starlang
 cd starlang
 
 python starlang.py   demo1.star     # 解释器
@@ -327,3 +327,12 @@ vscode-starlang/ VS Code 语法高亮扩展（含生成器 + 校验器）
 - **[demo1.star](demo1.star)** 起 —— 30 个 demo 覆盖所有特性
 - 想看某个特性是怎么实现的？`starlang.py` 里每一步都有 `Step N：` 的注释，
   包括**为什么这么设计**和**踩过的坑**
+
+---
+
+## 许可证
+
+MIT。拿去用、改、商用都行，保留版权声明即可。
+
+这个仓库真正的产出是「怎么发现实现分歧」的那套流程，
+所以越容易被抄走越好。
