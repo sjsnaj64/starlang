@@ -552,32 +552,22 @@ class 字节码编译器:
 # ═══════════════════════════════════════════════════════════
 #  三、VM：一个 while 跑到底
 # ═══════════════════════════════════════════════════════════
-def _加(a, b):
-    if isinstance(a, str) or isinstance(b, str):
-        return fmt(a) + fmt(b)
-    return a + b
-
-
-def _除(a, b):
-    if b == 0:
-        raise ZeroDivisionError("星语：除数不能为 0")
-    return a / b
-
-
-def _余(a, b):
-    if b == 0:
-        raise ZeroDivisionError("星语：取余的除数不能为 0")
-    return a % b
-
-
-def _正规下标(容器, 下标):
-    if isinstance(下标, bool) or not isinstance(下标, int):
-        raise RuntimeError("星语：下标得是整数，你给的是 " + fmt(下标))
-    位置 = 下标 + len(容器) if 下标 < 0 else 下标
-    if 位置 < 0 or 位置 >= len(容器):
-        raise IndexError("星语：下标 " + str(下标) + " 越界了（这里只有 "
-                         + str(len(容器)) + " 个）")
-    return 位置
+# ★★ Step 28：运算规则全部收口到 starlang.py，这里只做别名。
+#   以前 _加 / _除 / _余 / _正规下标 在这里是【第二份实现】——
+#   跟 starlang.py 那份「恰好一致」，靠人肉同步保证。
+#   现在改 starlang.py 一处，解释器 / 编译器 / VM 一起变。
+_加 = starlang.加
+_减 = starlang.减
+_乘 = starlang.乘
+_除 = starlang.除
+_余 = starlang.余
+_幂 = starlang.幂
+_取负 = starlang.取负
+_取正 = starlang.取正
+_比较 = starlang.比较
+_正规下标 = starlang._正规下标
+_下标 = starlang.取下标
+_设下标 = starlang.设下标
 
 
 class VM:
@@ -688,15 +678,16 @@ class VM:
                         栈[-1] = truthy(栈[-1])
 
                     # ---- 算术 ----
+                    # ★ Step 28：全部走收口函数，不再就地运算
                     elif 操作 == "ADD":
                         b = 栈.pop(); a = 栈.pop()
                         栈.append(_加(a, b))
                     elif 操作 == "SUB":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a - b)
+                        栈.append(_减(a, b))
                     elif 操作 == "MUL":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a * b)
+                        栈.append(_乘(a, b))
                     elif 操作 == "DIV":
                         b = 栈.pop(); a = 栈.pop()
                         栈.append(_除(a, b))
@@ -705,29 +696,29 @@ class VM:
                         栈.append(_余(a, b))
                     elif 操作 == "POW":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a ** b)
+                        栈.append(_幂(a, b))
                     elif 操作 == "NEG":
-                        栈[-1] = -栈[-1]
+                        栈[-1] = _取负(栈[-1])
                     elif 操作 == "NOT":
                         栈[-1] = not truthy(栈[-1])
                     elif 操作 == "EQ":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a == b)
+                        栈.append(_比较("==", a, b))
                     elif 操作 == "NE":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a != b)
+                        栈.append(_比较("!=", a, b))
                     elif 操作 == "LT":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a < b)
+                        栈.append(_比较("<", a, b))
                     elif 操作 == "GT":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a > b)
+                        栈.append(_比较(">", a, b))
                     elif 操作 == "LE":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a <= b)
+                        栈.append(_比较("<=", a, b))
                     elif 操作 == "GE":
                         b = 栈.pop(); a = 栈.pop()
-                        栈.append(a >= b)
+                        栈.append(_比较(">=", a, b))
 
                     # ---- 跳转 ----
                     elif 操作 == "JUMP":
@@ -800,30 +791,18 @@ class VM:
                         对.reverse()
                         栈.append(dict(对))
                     elif 操作 == "INDEX":
+                        # ★ Step 28：取值逻辑收口到 starlang.取下标
                         下标 = 栈.pop()
                         容器 = 栈.pop()
-                        if isinstance(容器, dict):
-                            if 下标 not in 容器:
-                                raise RuntimeError(
-                                    "星语：字典里没有键 " + starlang._带引号(下标)
-                                    + "（用 含有() 先问一下）")
-                            栈.append(容器[下标])
-                        elif isinstance(容器, (list, str)):
-                            栈.append(容器[_正规下标(容器, 下标)])
-                        else:
-                            raise RuntimeError(
-                                "星语：" + fmt(容器) + " 这东西不能用 [] 取下标")
+                        栈.append(_下标(容器, 下标))
                     elif 操作 == "SETINDEX":
+                        # ★ Step 28：写回收口到 starlang.设下标。
+                        #   ★ 注意它返回 None，而 SETINDEX 的语义是「留一个值在栈上」，
+                        #     所以这里得自己把 值 再压回去 —— 不能拿返回值。
                         值 = 栈.pop()
                         下标 = 栈.pop()
                         容器 = 栈.pop()
-                        if isinstance(容器, dict):
-                            容器[下标] = 值
-                        elif isinstance(容器, list):
-                            容器[_正规下标(容器, 下标)] = 值
-                        else:
-                            raise RuntimeError(
-                                "星语：" + fmt(容器) + " 这东西不能用 [] 改内容")
+                        _设下标(容器, 下标, 值)
                         栈.append(值)
 
                     # ---- 函数 ----

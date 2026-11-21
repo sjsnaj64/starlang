@@ -283,21 +283,35 @@ class 编译器:
 
         # ---- 一元 ----
         if len(n) == 2:
+            # ★ Step 28：一元也收口
+            if k == "-":
+                return "_取负(" + self.式(n[1]) + ")"
+            if k == "+":
+                return "_取正(" + self.式(n[1]) + ")"
             return "(" + k + self.式(n[1]) + ")"
 
         # ---- 二元 ----
+        # ★★ Step 28：全部走 starlang.py 里那套收口函数，不再自己实现一遍。
+        #   以前减/乘/比较是直接内联成 (a - b) 的 —— 它们跟解释器"恰好一样"，
+        #   但万一哪天星语想给 `-` 加个特例（比如文本不能相减），
+        #   就得记住改三个地方。现在只有一处。
+        #   代价：生成的 Python 没那么像人话了，但 _减(a, b) 也不难读。
         左 = self.式(n[1])
         右 = self.式(n[2])
         if k == "+":
-            return "_加(" + 左 + ", " + 右 + ")"      # 一边是字符串就拼接，得走函数
+            return "_加(" + 左 + ", " + 右 + ")"
+        if k == "-":
+            return "_减(" + 左 + ", " + 右 + ")"
+        if k == "*":
+            return "_乘(" + 左 + ", " + 右 + ")"
         if k == "/":
             return "_除(" + 左 + ", " + 右 + ")"
         if k == "%":
             return "_余(" + 左 + ", " + 右 + ")"
         if k == "**":
-            return "(" + 左 + " ** " + 右 + ")"
-        if k in ("-", "*", "<", ">", "<=", ">=", "==", "!="):
-            return "(" + 左 + " " + k + " " + 右 + ")"
+            return "_幂(" + 左 + ", " + 右 + ")"
+        if k in ("<", ">", "<=", ">=", "==", "!="):
+            return "_比较(" + repr(k) + ", " + 左 + ", " + 右 + ")"
 
         raise RuntimeError("星语编译器：不认识的表达式节点 " + repr(k))
 
@@ -811,64 +825,32 @@ _行映射 = {}
 
 
 def _取星语行(e):
-    """沿着 traceback 往下走，取最后一个能查到映射的行 —— 那就是真正出错处。"""
+    """沿着 traceback 往下走，取最后一个能查到映射的行 —— 那就是真正出错处。
+
+    ★★ Step 28 踩到的坑（很重要）：
+      把运算规则收口到 starlang.py 之后，traceback 里多出了【别的文件】的帧
+      （比如 starlang.py 里 `除()` 的 raise 那一行）。
+      那些帧的行号是 starlang.py 自己的行号（八百多、一千八百多），
+      而 _行映射 的键是【产物】的行号 —— 两边一撞，就查到一条完全不相干的星语行。
+      demo13 的报错行号从 1161 跳成 314，就是这么来的。
+
+      所以这里必须【只看产物自己的帧】。判据：该帧的全局命名空间里有 _行映射 ——
+      这个词是我们生成到产物里的，starlang.py 那边没有。
+    """
     tb = getattr(e, "__traceback__", None)
     找到 = 0
     while tb is not None:
-        行号 = tb.tb_lineno
-        if 行号 in _行映射:
-            找到 = _行映射[行号]
+        if "_行映射" in tb.tb_frame.f_globals:      # ← 只认产物自己的帧
+            行号 = tb.tb_lineno
+            if 行号 in _行映射:
+                找到 = _行映射[行号]
         tb = tb.tb_next
     return 找到
 
 
-def _加(a, b):
-    if isinstance(a, str) or isinstance(b, str):
-        return _fmt(a) + _fmt(b)
-    return a + b
-
-
-def _除(a, b):
-    if b == 0:
-        raise ZeroDivisionError("星语：除数不能为 0")
-    return a / b
-
-
-def _余(a, b):
-    if b == 0:
-        raise ZeroDivisionError("星语：取余的除数不能为 0")
-    return a % b
-
-
-def _正规下标(容器, 下标):
-    if isinstance(下标, bool) or not isinstance(下标, int):
-        raise RuntimeError("星语：下标得是整数，你给的是 " + _fmt(下标))
-    位置 = 下标 + len(容器) if 下标 < 0 else 下标
-    if 位置 < 0 or 位置 >= len(容器):
-        raise IndexError("星语：下标 " + str(下标) + " 越界了（这里只有 "
-                         + str(len(容器)) + " 个）")
-    return 位置
-
-
-def _下标(容器, 下标):
-    if isinstance(容器, dict):
-        if 下标 not in 容器:
-            raise RuntimeError("星语：字典里没有键 " + _带引号(下标)
-                               + "（用 含有() 先问一下）")
-        return 容器[下标]
-    if isinstance(容器, (list, str)):
-        return 容器[_正规下标(容器, 下标)]
-    raise RuntimeError("星语：" + _fmt(容器) + " 这东西不能用 [] 取下标")
-
-
-def _设下标(容器, 下标, 值):
-    if isinstance(容器, dict):
-        容器[下标] = 值
-        return 值
-    if isinstance(容器, list):
-        容器[_正规下标(容器, 下标)] = 值
-        return 值
-    raise RuntimeError("星语：" + _fmt(容器) + " 这东西不能用 [] 改内容")
+# ★★ Step 28：原来的 _加 / _除 / _余 / _正规下标 / _下标 / _设下标 已经删了，
+#   它们那份实现跟 starlang.py 里的一模一样，纯属重复。
+#   真正的别名绑定见下面「内建函数」那一节（必须等 _sl 导入之后）。
 
 
 def _带引号(s):
@@ -904,6 +886,23 @@ def _fmt(v):
 # ---- 内建函数：直接把 starlang.py 里那套搬过来，行为完全一致 ----
 import starlang as _sl
 _内建实现 = _sl.内建函数
+
+# ★★★ Step 28：运算规则全部收口到 starlang.py ，这里只做别名。
+#   以前这些函数在前言里是【第二份实现】，跟 starlang.py 那份「恰好一致」——
+#   那叫靠人肉同步，不叫靠结构。现在改 starlang.py 一处，三家一起变。
+#   ★ 必须放在 import starlang 之后，不然产物执行到这儿 _sl 还不存在。
+_加 = _sl.加
+_减 = _sl.减
+_乘 = _sl.乘
+_除 = _sl.除
+_余 = _sl.余
+_幂 = _sl.幂
+_取负 = _sl.取负
+_取正 = _sl.取正
+_比较 = _sl.比较
+_正规下标 = _sl._正规下标
+_下标 = _sl.取下标
+_设下标 = _sl.设下标
 # ★ Step 23：引入进来的模块常量也走同一张表（math_pi / np_e 这些）
 _内建常量 = _sl.内建常量
 # ★ Step 26：`模块.名字` 的取值逻辑，三家共用 starlang.属性取值()

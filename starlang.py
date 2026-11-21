@@ -63,6 +63,15 @@
           —— 结束程序(码)：顶层不能 返回，没法「检查完就收工」
           —— 顺手修了一个老毛病：打印 以前固定加 3 格缩进，
              输出重定向到文件后 Markdown 表格就不成表格了
+ Step 28：语义收口 —— 运算规则只在一个地方定义 ✔
+          —— 以前「星语的加法怎么算」有【三份】答案（解释器内联、
+             编译器前言、VM 各写一遍），靠人肉同步保证一致
+          —— 现在只有 加/减/乘/除/余/幂/取负/取正/比较/取下标/设下标 这一处
+          —— 副产品：这十几个函数就是「星语的语义」本身。将来换宿主，
+             重写它们就行，解析器一个字不用碰
+          —— 收口时炸出一个潜伏 bug：traceback 里【别的文件】的帧，
+             行号会撞进产物的行号映射表 → 报错指错行
+             （没改过一行的 demo13 才把它照出来）
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -1794,6 +1803,96 @@ def _要参数(名字, 实参, 最少, 最多=None):
         )
 
 
+# ═══════════════════════════════════════════════════════════
+#  Step 28：语义收口 —— 运算规则只在一个地方定义
+# ═══════════════════════════════════════════════════════════
+# ★★ 为什么要有这一节？
+#
+#   以前「星语的加法怎么算」这个问题的答案有【三份】：
+#       starlang.py   里内联的   left + right
+#       starlangc.py  前言里的   def _加(a, b)
+#       starlangvm.py 里写的     def _加(a, b)
+#   它们当时恰好一致 —— 但那是靠【人肉同步】保证的，不是靠结构。
+#   哪天有人改了其中一份忘了另外两份，差分测试就会炸，可那时候已经晚了。
+#
+#   收口之后：改一个地方，三家一起变。
+#
+# ★ 还有一个更长远的意义：
+#   这十几个函数就是「星语的语义」本身。将来想换宿主（比如移植到 Go / Rust），
+#   只要把这十几行重写一遍，解析器一个字都不用碰 ——
+#   这就是「语义独立于宿主」的最小形态。
+
+def 加(a, b):
+    """★ 星语的语言设计决定：只要有一边是文本，就按「拼起来」算。
+
+        "第 " + 3     →  "第 3"
+        1 + 2         →  3
+        "1" + 1       →  "11"     ← 不是 2
+
+    为什么这么选：`打印` 只能吐一个东西，也没有 f-string。
+    不能拼字符串就等于连「第 3 轮」都说不出来，那字符串就是半残废。
+
+    代价：这是 JS 的规则，不是 Python 的（Python 会直接报错让你先转类型）。
+    选了「方便」，因为这是玩具语言，用户要的是能拼出话来看。
+    """
+    if isinstance(a, str) or isinstance(b, str):
+        return fmt(a) + fmt(b)
+    return a + b
+
+
+def 减(a, b):
+    return a - b
+
+
+def 乘(a, b):
+    # ★ 注意：星语【不支持】 "重复" * 3 这种写法。
+    #   文本乘数字会在这里由 Python 算出来，但那是没人测过的角落 ——
+    #   真要用文本重复请用标准库的 文重复()。
+    #   列表 * 数字同理，用 重复成()。
+    return a * b
+
+
+def 除(a, b):
+    if b == 0:
+        raise ZeroDivisionError("星语：除数不能为 0")
+    return a / b
+
+
+def 余(a, b):
+    if b == 0:
+        raise ZeroDivisionError("星语：取余的除数不能为 0")
+    return a % b
+
+
+def 幂(a, b):
+    return a ** b
+
+
+def 取负(a):
+    return -a
+
+
+def 取正(a):
+    return +a
+
+
+def 比较(运, a, b):
+    """六种比较收成一个 —— 三个引擎用同一个函数，说法不可能分叉。"""
+    if 运 == "<":
+        return a < b
+    if 运 == ">":
+        return a > b
+    if 运 == "<=":
+        return a <= b
+    if 运 == ">=":
+        return a >= b
+    if 运 == "==":
+        return a == b
+    if 运 == "!=":
+        return a != b
+    raise RuntimeError("星语：不认识的比较运算 " + repr(运))
+
+
 def _正规下标(容器, 下标):
     """把下标规整成 Python 能用的正整数，越界就把话说清楚"""
     if isinstance(下标, bool) or not isinstance(下标, int):
@@ -1818,6 +1917,21 @@ def 取下标(容器, 下标):
     if isinstance(容器, (list, str)):
         return 容器[_正规下标(容器, 下标)]
     raise RuntimeError("星语：" + fmt(容器) + " 这东西不能用 [] 取下标")
+
+
+def 设下标(容器, 下标, 值):
+    """`表[i] = 值` —— 跟 取下标() 成对，规矩也一样。
+
+    ★ Step 28 收口：以前解释器的 setindex / setindexop 各写一遍这件事，
+      编译器前言和 VM 里又各有一份。现在只有这一份。
+    """
+    if isinstance(容器, dict):
+        容器[下标] = 值
+        return None
+    if isinstance(容器, list):
+        容器[_正规下标(容器, 下标)] = 值
+        return None
+    raise RuntimeError("星语：" + fmt(容器) + " 这东西不能用 [] 改内容")
 
 
 def _长度(实参):
@@ -2828,12 +2942,13 @@ def evaluate(node, env):
         return 带钩子调用(callee, args)
 
     # ---- 一元节点（两元素 tuple）----
+    # ★ Step 28：也收口了 —— 规则只写在 取负/取正 里
     if len(node) == 2:
         operand = evaluate(node[1], env)
         if kind == "-":
-            return -operand
+            return 取负(operand)
         if kind == "+":
-            return +operand
+            return 取正(operand)
         if kind == "非":                     # Step 11
             return not truthy(operand)
         raise RuntimeError(f"未知的一元运算符 {kind!r}")
@@ -2852,52 +2967,26 @@ def evaluate(node, env):
         return truthy(evaluate(node[2], env))
 
     # ---- 二元节点（三元素 tuple）----
+    # ★★ Step 28：这里只做「求值 + 分发」，运算规则全在 加/减/乘/除/… 里。
+    #   以前这些分支里塞满了实现细节（文本拼接、除零报中文），
+    #   而编译器和 VM 里又各抄了一遍。现在只有一份。
     left = evaluate(node[1], env)
     right = evaluate(node[2], env)
 
     if kind == "+":
-        # ★★ Step 6 的一个语言设计决定：只要有一边是文本，就按「拼起来」算
-        #
-        #   为什么这么选：
-        #     星语的 打印 只能吐一个东西，没有 f-string、没有格式化。
-        #     如果不能拼字符串，就等于连「第 3 轮」这种话都说不出来，
-        #     那字符串就是半残废。
-        #
-        #   代价（写的时候自己记住）：
-        #     "1" + 1   →  "11"      ← 不是 2
-        #     1 + 1     →  2         ← 两边都是数字才是算数
-        #
-        #   这是 JS 的规则，不是 Python 的。Python 会直接报错让你先转类型；
-        #   这里选了「方便」，因为这是玩具语言，用户要的是能拼出话来看。
-        if isinstance(left, str) or isinstance(right, str):
-            return fmt(left) + fmt(right)
-        return left + right
+        return 加(left, right)
     if kind == "-":
-        return left - right
+        return 减(left, right)
     if kind == "*":
-        return left * right
+        return 乘(left, right)
     if kind == "/":
-        if right == 0:
-            raise ZeroDivisionError("星语：除数不能为 0")
-        return left / right
+        return 除(left, right)
     if kind == "%":
-        if right == 0:
-            raise ZeroDivisionError("星语：取余的除数不能为 0")
-        return left % right
+        return 余(left, right)
     if kind == "**":
-        return left ** right
-    if kind == "<":
-        return left < right
-    if kind == ">":
-        return left > right
-    if kind == "<=":
-        return left <= right
-    if kind == ">=":
-        return left >= right
-    if kind == "==":
-        return left == right
-    if kind == "!=":
-        return left != right
+        return 幂(left, right)
+    if kind in ("<", ">", "<=", ">=", "==", "!="):
+        return 比较(kind, left, right)
 
     raise RuntimeError(f"未知的节点类型 {kind!r}")
 
@@ -2929,16 +3018,8 @@ def execute(stmt, env):
 
     # ---- 改下标：a[0] = 值（Step 9 新增）----
     if kind == "setindex":
-        容器 = evaluate(stmt[1], env)
-        下标 = evaluate(stmt[2], env)
-        值 = evaluate(stmt[3], env)
-        if isinstance(容器, dict):
-            容器[下标] = 值
-            return None
-        if isinstance(容器, list):
-            容器[_正规下标(容器, 下标)] = 值
-            return None
-        raise RuntimeError("星语：" + fmt(容器) + " 这东西不能用 [] 改内容")
+        return 设下标(evaluate(stmt[1], env), evaluate(stmt[2], env),
+                    evaluate(stmt[3], env))
 
     if kind == "expr":
         return evaluate(stmt[1], env)     # 表达式有值，顺手返回给 REPL 用
@@ -3019,14 +3100,8 @@ def execute(stmt, env):
         下标 = evaluate(stmt[2], env)
         旧值 = 取下标(容器, 下标)     # 顺便把「越界/类型不对」的检查也复用了
         新值 = evaluate((stmt[3], ("已值", 旧值), stmt[4]), env)
-        # 写回 —— 跟 setindex 用同一套规矩（字典任意键，列表要正规下标）
-        if isinstance(容器, dict):
-            容器[下标] = 新值
-            return None
-        if isinstance(容器, list):
-            容器[_正规下标(容器, 下标)] = 新值
-            return None
-        raise RuntimeError("星语：" + fmt(容器) + " 这东西不能用 [] 改内容")
+        # ★ Step 28：写回交给 设下标() —— 跟普通 setindex 同一套规矩
+        return 设下标(容器, 下标, 新值)
 
     # ---- 块与控制流（Step 3 新增）----
     if kind == "block":
