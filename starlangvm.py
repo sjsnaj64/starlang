@@ -593,6 +593,9 @@ class VM:
         if isinstance(f, 内建):
             return 内建函数[f.名字](实参)
         if not isinstance(f, VM函数):
+            # ★ Step 24：宿主塞进来的裸 Python 可调用对象（含 取() 包出来的）
+            if callable(f):
+                return starlang.调外来(f, 实参)
             raise RuntimeError("星语：这个东西不是函数，不能加 () 调用它")
         前 = 钩子表.get(f.名字, {}).get("之前", ())
         for h in 前:

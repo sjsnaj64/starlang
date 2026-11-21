@@ -42,6 +42,12 @@
           —— 星语的值本来就是 Python 原生对象，所以调 Python 零转换成本
              名字挂成 模块名_原名（math_sqrt / js_dumps），常量也挂
              因为三家读的是同一个 内建函数 字典，引擎代码一行没改
+ Step 24：星语当库用 —— 反方向，Python 来当宿主 ✔
+          —— m = starlang.星语()
+             m.执行("(1 + 2) * 3")        → 9   （星语的算给 Python）
+             m.取("加税")(100)            → 106 （星语函数给 Python 调）
+             m.给("打招呼", 某个lambda)   → 星语里直接 打招呼("世界")
+             两边的值本来就是同一批对象，所以「来回搬」也不需要转换
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -2470,6 +2476,25 @@ def 展开所有宏(语句们):
     return 结果
 
 
+def 调外来(函数, 实参):
+    """调用宿生塞进来的 Python 可调用对象（裸 lambda、_可调用 包出来的…）。
+
+    ★ 三家共用这一句 —— 错误说法必须一致，不然差分测试立刻能拓到。
+    ★ RuntimeError 要原样透传：那是星语层面的错误（比如 _可调用 已经
+      用 最终文案() 翻译过的），再包一层就变成套娃娃了。
+    """
+    try:
+        return 函数(*实参)
+    except RuntimeError:
+        raise
+    except TypeError as e:
+        raise RuntimeError(
+            "星语：调用外来的函数时参数不对（" + str(e) + "）") from None
+    except Exception as e:
+        raise RuntimeError(
+            "星语：调用外来的函数时 Python 抛错：" + str(e)) from None
+
+
 def 调函数(f, 实参):
     """真止调一个函数。★ 这个函数【不看钩子表】——
     正因为如此，钩子自己不会再被套一层，不会无端递归。"""
@@ -2588,6 +2613,10 @@ def evaluate(node, env):
         if isinstance(callee, 内建):
             return 内建函数[callee.名字](args)
         if not isinstance(callee, Func):
+            # ★ Step 24：宿主塞进来的裸 Python 可调用对象（含 取() 包出来的）
+            #   —— 星语函数能当参数传来传去，靠的就是这一支。
+            if callable(callee):
+                return 调外来(callee, args)
             raise RuntimeError("星语：这个东西不是函数，不能加 () 调用它")
         # ★ Step 7：从这里开始不再直接调，而是先查钩子表
         return 带钩子调用(callee, args)
@@ -3414,6 +3443,143 @@ def run(src, flags=(), env=None, echo=False, 基准目录=None):
         # ★ 顶层烂掉的也要补行号 + 过文案表 —— VM 那边就是这么干的，
         #   不然同一个错误两边说法不一样（差分测试立刻就能抓到）。
         raise RuntimeError(最终文案(e)) from None
+
+
+# ═══════════════════════════════════════════════════════════
+#  Step 24：星语当库用 —— 让 Python 来当宿主
+# ═══════════════════════════════════════════════════════════
+# 三个方向都要通，才算「真能当库」：
+#
+#   ① 星语算个值给 Python
+#        m.执行("1 + 2")                    → 3
+#
+#   ② 星语写的函数给 Python 调
+#        m.执行("定义 加税(元) { 返回 元 * 1.06 }")
+#        m.取("加税")(100)                  → 106.0
+#
+#   ③ Python 的函数给星语调
+#        m.给("打招呼", lambda 谁: "你好 " + 谁)
+#        m.执行('打印 打招呼("世界")')
+#
+# ★ 为什么 ③ 要绕一圈注册进 内建函数，而不是把 lambda 直接塞进环境？
+#   因为三个引擎的调用分派只认两种东西：Func（星语函数）和 内建（内置）。
+#   塞个裸 lambda 进去，解释器只会报「这个东西不是函数」。
+#   塞进 内建函数 字典则是三家都认的老路 —— 引擎代码一行都不用动。
+#   （跟 Step 23 的 引入 是同一个原理：三家共用一个字典，就是共用一份能力。）
+
+
+def _可调用(f):
+    """把星语 Func 包成 Python 能调的样子。
+
+    ★ 错误要在这里收口：星语函数里抛的 ZeroDivisionError / NameError 之类
+      如果直接冒给 Python，拿到的是半截英文 + 没行号。走一遍 最终文案()，
+      跟「星语自己跑挂了」的说法**完全一致** —— 宿主和语言这才算同一种体验。
+    """
+    def 调用(*实参):
+        try:
+            return 调函数(f, list(实参))
+        except Exception as e:
+            raise RuntimeError(最终文案(e)) from None
+
+    调用.__name__ = f.name
+    调用.__doc__ = ("星语函数「" + f.name + "」，参数："
+                    + ", ".join(f.params))
+    return 调用
+
+
+class 星语:
+    """一个星语「小世界」—— 变量住在自己身上，不跟别人串味。
+
+        m = 星语({"单价": 100})       ← 可以带初始变量进去
+        m.执行("总价 = 单价 * 3")
+        m.环境.vars["总价"]           → 300
+
+    ★ 实例之间变量是隔离的（各自一个 Environment），
+      但 给() 注册的函数放在全局 内建函数 字典里 —— 那是三家引擎共用的老地方，
+      所以用完记得 关闭()，或者直接用 with 语句。
+    """
+
+    def __init__(self, 变量=None, 基准目录=None):
+        self.环境 = Environment()
+        self.基准目录 = 基准目录
+        self._给过 = []
+        for 名, 值 in (变量 or {}).items():
+            self.给变量(名, 值)
+
+    # ---- ① 跑代码，拿最后一个值 ----
+    def 执行(self, 源码, echo=False, flags=()):
+        """跑一段星语，返回最后一个语句的值（没有值就是 None）。"""
+        return run(源码, flags=flags, env=self.环境, echo=echo,
+                   基准目录=self.基准目录)
+
+    跑 = 执行                                  # 短别名
+
+    # ---- ③ Python → 星语 ----
+    def 给变量(self, 名, 值):
+        """塞一个值（列表、字典、随便什么）进星语的变量表。
+        ★ 不用转换 —— 星语的值本来就是 Python 原生对象。"""
+        self.环境.define(名, 值)
+        return 值
+
+    def 给函数(self, 名, 函数):
+        """塞一个 Python 函数进去，星语里就能直接 `名字(实参)` 用了。"""
+
+        def 转(实参):
+            try:
+                return 函数(*实参)
+            except TypeError as e:
+                raise RuntimeError(
+                    "星语：调用外来的「" + 名 + "」时参数不对（" + str(e) + "）"
+                ) from None
+            except Exception as e:
+                raise RuntimeError(
+                    "星语：调用外来的「" + 名 + "」时 Python 抛错：" + str(e)
+                ) from None
+
+        内建函数[名] = 转
+        self.环境.define(名, 内建(名))
+        self._给过.append(名)
+        return 函数
+
+    给 = 给函数                                # 短别名
+
+    # ---- ② 星语 → Python ----
+    def 取(self, 名):
+        """取出一个名字。星语函数会被包成 Python 可调用对象。
+
+        ★ 取不到就返回 None，不抛异常 —— Python 这边习惯先问「有没有」。
+          想区分「真的没有」和「值就是 空」，用 有() 先问一声。
+        """
+        try:
+            值 = self.环境.get(名)
+        except NameError:
+            return None
+        if isinstance(值, Func):
+            return _可调用(值)
+        if isinstance(值, 内建):
+            return lambda *实参: 内建函数[值.名字](list(实参))
+        return 值
+
+    def 有(self, 名):
+        try:
+            self.环境.get(名)
+            return True
+        except NameError:
+            return False
+
+    # ---- 收尾 ----
+    def 关闭(self):
+        """把 给() 注册进全局字典的名字摘掉 —— 不然会漏给下一个实例。"""
+        for 名 in self._给过:
+            内建函数.pop(名, None)
+        self._给过.clear()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *瞎):
+        self.关闭()
+        return False
 
 
 def tree_lines(node):

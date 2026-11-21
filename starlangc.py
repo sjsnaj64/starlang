@@ -694,6 +694,10 @@ def _调(f, 实参):
         return 值
     if isinstance(f, _内建):
         return _内建实现[f.名字](实参)
+    # ★ Step 24：宿主塞进来的裸 Python 可调用对象（含 取() 包出来的）
+    #   —— 错误说法跟解释器/VM 共用 starlang.调外来，不在这里重写一遍。
+    if callable(f):
+        return _sl.调外来(f, 实参)
     raise RuntimeError("星语：这个东西不是函数，不能加 () 调用它")
 
 
