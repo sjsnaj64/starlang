@@ -45,7 +45,8 @@ def 造语法():
     #   不然语言能跑了、编辑器里却是灰的（Step 14~17 就漏了好几批）。
     控制流 = (list(starlang.IF_WORDS) + list(starlang.ELSE_WORDS)
             + list(starlang.WHILE_WORDS) + list(starlang.BREAK_WORDS)
-            + list(starlang.CONTINUE_WORDS) + list(starlang.THEN_WORDS))
+            + list(starlang.CONTINUE_WORDS) + list(starlang.THEN_WORDS)
+            + list(starlang.FOR_WORDS) + list(starlang.IN_WORDS))
     函数类 = (list(starlang.FUNC_WORDS) + list(starlang.RETURN_WORDS)
             + list(starlang.LAMBDA_WORDS))
     输出类 = list(starlang.PRINT_WORDS)

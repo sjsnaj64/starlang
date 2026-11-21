@@ -323,6 +323,17 @@ class 打印机:
                 行们.append(缩 + "只要 " + 式(s[1]) + 尾)
                 self.语句块(s[2], 层 + 1, 行们)
 
+        elif k == "for":
+            if self.花括号里:
+                行们.append(缩 + "遍历 " + 安全名(s[1]) + " 于 "
+                           + 式(s[2]) + " {")
+                self.语句块(s[3], 层 + 1, 行们)
+                行们.append(缩 + "}")
+            else:
+                行们.append(缩 + "遍历 " + 安全名(s[1]) + " 于 "
+                           + 式(s[2]) + 尾)
+                self.语句块(s[3], 层 + 1, 行们)
+
         elif k == "funcdef":
             默认们 = s[4] if len(s) > 4 else None
             if not isinstance(默认们, list):

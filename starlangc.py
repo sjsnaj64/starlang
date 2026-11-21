@@ -109,6 +109,9 @@ def 扫描语句(域, s):
     elif k == "while":
         扫描(域, s[2][1])
 
+    elif k == "for":
+        扫描(域, s[3][1])
+
     elif k == "try":
         域.定义.add(s[2])        # 出错块里的那个变量名
         扫描(域, s[1][1])
@@ -401,6 +404,18 @@ class 编译器:
                 self.循环深度 -= 1
             self.深 -= 1
 
+        elif k == "for":
+            # ★ 遍历 跟 Python 的 for 语义直接对上，几乎不用费心：
+            #   快照、字典给键、文本给字 —— 靠前言里的 _循环速() 一次搞定。
+            self.写("for " + py名(s[1]) + " in _循环速(" + self.式(s[2]) + "):")
+            self.深 += 1
+            self.循环深度 += 1
+            try:
+                self.语句表(s[3][1])
+            finally:
+                self.循环深度 -= 1
+            self.深 -= 1
+
         elif k in ("break", "continue"):
             if self.循环深度 == 0:
                 raise SyntaxError(self.跳出错误(s, "跳出" if k == "break" else "继续"))
@@ -640,6 +655,21 @@ def _真(v):
     if isinstance(v, (str, list, dict)):
         return len(v) > 0
     return True
+
+
+def _循环速(v):
+    """把要遍历的东西转成一个「快照序列」。
+
+    ★ 为什么先复制一份？
+      边遍历边改容器（追加 / 弹出）是无数 bug 的源头 —— Python 里会跳过元素
+      甚至死循环。星语直接切断这种可能：遍历到的是开始那一刻的样子。
+    ★ 字典返回【键】，跟 键们() 一致。要值就用 值们() 或 遍历 k 于 字典{ 字典[k] }。
+    """
+    if isinstance(v, dict):
+        return list(v.keys())
+    if isinstance(v, (list, str)):
+        return list(v)
+    raise RuntimeError("星语：遍历 只认列表、文本、字典，这是 " + _fmt(v))
 
 
 def _还名(p):

@@ -114,11 +114,11 @@
       "patterns": [
         {
           "name": "keyword.control.exception.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:catch|try|错了|尝试|试试|出事|出错)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:catch|try|出事|出错|尝试|试试|错了)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.control.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:continue|while|break|跳过这圈|loop|退出循环|then|else|下一圈|重复|只要|那么|否则|假如|继续|不然|打断|if|循环|如果|跳出|要是|则|若|当)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:continue|while|break|loop|跳过这圈|退出循环|else|then|下一圈|for|逐个|对于|只要|如果|跳出|if|假如|遍历|否则|继续|要是|重复|那么|in|不然|循环|打断|若|在|则|当|于)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.other.elseif.starlang",
@@ -126,34 +126,34 @@
         },
         {
           "name": "storage.type.function.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:function|lambda|return|匿名函数|func|lam|小函数|def|函数|fn|定义|回传|匿名|交回|返回)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:function|lambda|return|func|匿名函数|小函数|lam|def|交回|返回|函数|定义|匿名|fn|回传)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "support.function.print.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:print|echo|显示|打印|输出|说)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:print|echo|打印|显示|输出|说)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.operator.word.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:not|and|而且|或者|并且|or|且|非|或)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:not|and|or|或者|而且|并且|非|或|且)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.other.macro.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:insert|macro|tail|head|塞进去|插进去|标签|最后|末尾|插入|结尾|开头|最前|标号|开始|宏)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:insert|macro|head|tail|插进去|塞进去|标号|最前|插入|开始|末尾|结尾|最后|开头|标签|宏)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "keyword.other.hook.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:unregister|register|before|unhook|after|hook|拔掉|摘掉|挂上|注册|之前|之后|卸下|前|后)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:unregister|register|unhook|before|after|hook|拔掉|挂上|摘掉|卸下|注册|之前|之后|后|前)(?![\\p{L}\\p{N}_])"
         },
         {
           "name": "constant.language.boolean.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:nothing|什么都没有|false|true|null|nil|空值|假|真|空)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:nothing|什么都没有|false|true|null|nil|空值|真|假|空)(?![\\p{L}\\p{N}_])"
         }
       ]
     },
     "变量": {
       "patterns": [
         {
-          "begin": "(?<![\\p{L}\\p{N}_])(?:function|func|def|函数|fn|定义)(\\s+)([\\p{L}\\p{N}_]+)(\\s*)(\\()",
+          "begin": "(?<![\\p{L}\\p{N}_])(?:function|func|def|函数|定义|fn)(\\s+)([\\p{L}\\p{N}_]+)(\\s*)(\\()",
           "beginCaptures": {
             "0": {
               "patterns": [
@@ -197,7 +197,7 @@
       "patterns": [
         {
           "name": "support.function.builtin.starlang",
-          "match": "(?<![\\p{L}\\p{N}_])(?:readline|replace|readall|append|exists|values|trunc|isnum|write|slice|split|strip|lines|chars|range|read|idiv|文件在吗|push|join|type|keys|追加文件|int|div|写文件|读一行|按行分|是数字|len|has|去空白|字符们|读文件|pop|读全部|取整|换成|范围|长度|取段|键们|类型|追加|排成|整除|弹出|切分|值们|含有|读檔)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(?:readline|readall|replace|exists|append|values|slice|trunc|range|isnum|strip|lines|write|split|chars|type|keys|文件在吗|read|push|join|idiv|追加文件|是数字|字符们|has|int|读全部|pop|按行分|写文件|len|div|读文件|读一行|去空白|长度|类型|整除|值们|范围|换成|取段|追加|读檔|排成|切分|含有|取整|键们|弹出)(?![\\p{L}\\p{N}_])"
         }
       ]
     },

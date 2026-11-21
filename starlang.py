@@ -26,6 +26,9 @@
           —— 如果 条件 则 A 否则 B 能当值用；点 += 1；排序按(表, 比较器)
  Step 18：默认参数 定义 f(a, b = 5) ✔
           —— 而且默认值是【每次调用重算】，不是定义时冻住（跟 Python 相反）
+ Step 19：遍历循环 遍历 项 于 表 ✔
+          —— 不用再手写「点 = 0 / 只要 点 < 长度 / 点 += 1」三件套；
+             还自带快照（边遍历边改容器不会乱）
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -575,6 +578,25 @@ LAMBDA_WORDS = ("匿名", "匿名函数", "lambda", "lam", "小函数")
 #   因为前缀匹配有 len>=2 的门槛，不会误伤「则名」这种变量）。
 THEN_WORDS = ("则", "那么", "then")
 
+# ---- Step 19：遍历循环 ----
+# 「列表里每个元素都做一遍」是写得最多的事。之前得手写三件套：
+#
+#     点 = 0
+#     只要 点 < 长度(表)
+#         项 = 表[点]
+#         … 干活 …
+#         点 += 1
+#
+# 现在一行：
+#
+#     遍历 项 于 表
+#         … 干活 …
+#
+# ★ 「于」也是单字 —— 进不了猜关键字（前缀匹配有 len>=2 的门槛），
+#   所以叫「于先生」的变量不会被误伤。
+FOR_WORDS = ("遍历", "对于", "逐个", "for")
+IN_WORDS = ("于", "在", "in")
+
 # ═══════════════════════════════════════════════════════════
 # 名字写错了，先猜你想写什么
 # ═══════════════════════════════════════════════════════════
@@ -590,7 +612,7 @@ THEN_WORDS = ("则", "那么", "then")
     + BEFORE_WORDS + AFTER_WORDS + TRY_WORDS + CATCH_WORDS
     + MACRO_WORDS + AND_WORDS + OR_WORDS + NOT_WORDS
     + tuple(BOOL_WORDS) + NULL_WORDS + BREAK_WORDS + CONTINUE_WORDS
-    + LAMBDA_WORDS + THEN_WORDS
+    + LAMBDA_WORDS + THEN_WORDS + FOR_WORDS + IN_WORDS
 )
 
 
@@ -651,6 +673,8 @@ def 速查表():
     组(行, "空", NULL_WORDS, "空值（读到输入结束时就是它）")
     组(行, "跳出", BREAK_WORDS, "立刻结束这一层循环")
     组(行, "继续", CONTINUE_WORDS, "跳过这一圈剩下的，直接进下一圈")
+    组(行, "遍历", FOR_WORDS, "遍历 项 于 表 —— 每个元素过一遍")
+    组(行, "  连词", IN_WORDS, "夹在变量名和表中间")
     组(行, "匿名", LAMBDA_WORDS, "匿名(x) { 返回 x * 2 } —— 当场造个函数")
     组(行, "  —— 三元", ("三元",), "如果 条件 则 A 否则 B（能当值用）")
     组(行, "尝试", TRY_WORDS, "尝试 { … }")
@@ -914,6 +938,9 @@ class Parser:
                 return self.if_statement()
             if t.value in WHILE_WORDS:
                 return self.while_statement()
+            # ★ Step 19：遍历循环
+            if t.value in FOR_WORDS:
+                return self.for_statement()
             if t.value in FUNC_WORDS:
                 return self.funcdef_statement()
             if t.value in RETURN_WORDS:
@@ -1054,6 +1081,24 @@ class Parser:
         cond = self.expression()
         body = self.block()
         return ("while", cond, body)
+
+    def for_statement(self):
+        """遍历 项 于 表    —— 每个元素过一遍"""
+        self.advance()                         # 吃掉 遍历 / for
+        if self.cur.kind != "NAME":
+            raise SyntaxError(
+                f"[语法错误] 第 {self.cur.line} 行: 「遍历」后面要跟一个变量名 —— "
+                f"遍历 项 于 表")
+        名 = self.advance().value
+        if not (self.cur.kind == "NAME" and self.cur.value in IN_WORDS):
+            实际 = self.cur.value if self.cur.kind in ("NAME", "NUM", "STR") \
+                else self.cur.kind
+            raise SyntaxError(
+                f"[语法错误] 第 {self.cur.line} 行: 变量「{名}」后面要跟"
+                f"「于」（或「在」），这里读到的却是 {实际!r}")
+        self.advance()                         # 吃掉 于 / 在 / in
+        容器 = self.expression()
+        return ("for", 名, 容器, self.block())
 
     # ---------- 函数（Step 4 新增）----------
     def funcdef_statement(self):
@@ -2312,6 +2357,10 @@ def 展开所有宏(语句们):
             结果.append(搬行号(s, ("while", s[1],
                                  ("block", 展开所有宏(s[2][1])))))
 
+        elif k == "for":
+            结果.append(搬行号(s, ("for", s[1], s[2],
+                                 ("block", 展开所有宏(s[3][1])))))
+
         elif k == "labeled":
             结果.append(搬行号(s, ("labeled", s[1], 展开所有宏([s[2]])[0])))
 
@@ -2635,6 +2684,31 @@ def execute(stmt, env):
                 continue                    # 「继续」→ 直接看下一圈条件
         return None
 
+    if kind == "for":                  # Step 19：遍历循环
+        名, 容器节点, 体 = stmt[1], stmt[2], stmt[3]
+        容器 = evaluate(容器节点, env)
+        # ★ 快照：先复制一份再遍历。
+        #   边遍历边改容器（追加/弹出）是无数 bug 的源头 ——
+        #   Python 里会直接跳过元素或者死循环。星语直接切断这种可能。
+        if isinstance(容器, dict):
+            序列 = list(容器.keys())    # 字典遍历【键】，跟 键们() 一致
+        elif isinstance(容器, (list, str)):
+            序列 = list(容器)           # 文本遍历【字】
+        else:
+            raise RuntimeError(
+                "星语：遍历 只认列表、文本、字典，这是 " + fmt(容器))
+        for 项 in 序列:
+            # ★ 用 set 不是 define —— 循环结束后这个变量还在（最后一项），
+            #   跟 Python 一样。不需要的话别指望它消失。
+            env.set(名, 项)
+            try:
+                execute(体, env)
+            except BreakSignal:
+                break
+            except ContinueSignal:
+                continue
+        return None
+
     # ---- 循环控制（Step 14）----
     # 这两条本来就不该被跑到：检查跳出() 已经保证它们套在循环里，
     # 而套在循环里的就一定被上面的 while 接住。漏到这里就是实现有 bug，
@@ -2890,6 +2964,10 @@ def 检查跳出(语句们, 循环深度=0):
 
         elif k == "while":
             检查跳出(s[2][1], 循环深度 + 1)
+
+        elif k == "for":
+            # ★ 遍历 也是循环 —— 里面的「跳出/继续」同样合法
+            检查跳出(s[3][1], 循环深度 + 1)
 
         elif k == "if":
             检查跳出(s[2][1], 循环深度)

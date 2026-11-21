@@ -361,6 +361,27 @@ class 字节码编译器:
             for 位置 in 层["出口们"]:
                 self.回填(位置, 出口)
 
+        elif k == "for":
+            # ★ 遍历循环：VM 没有 Python 那种迭代器协议，所以自己用一个
+            #   【运行时迭代栈】。ITER_START 把快照压进去，ITER_NEXT 取下一个。
+            self.编式(s[2])
+            self.发("ITER_START")
+            顶 = self.这里()
+            # ★ 顺序很重要：出口目标放指令[1] —— 回填() 只改指令[1]，
+            #   放后面的话回填会默默不生效（跳转目标永远停在 None）。
+            跳出口 = self.发("ITER_NEXT", None, s[1])
+            self.循环栈.append({"顶": 顶, "出口们": [], "深度": self.处理深度,
+                            "是迭代": True})
+            try:
+                self.编块(s[3], False)
+            finally:
+                层 = self.循环栈.pop()
+            self.发("JUMP_BACK", 顶)
+            出口 = self.这里()
+            self.回填(跳出口, 出口)
+            for 位置 in 层["出口们"]:
+                self.回填(位置, 出口)
+
         elif k in ("break", "continue"):
             if not self.循环栈:
                 raise SyntaxError(self.跳出错误(s, "跳出" if k == "break" else "继续"))
@@ -371,6 +392,10 @@ class 字节码编译器:
             for _ in range(self.处理深度 - 层["深度"]):
                 self.发("POP_TRY")
             if k == "break":
+                # ★ 遍历循环跳出时，要把它压在迭代栈上的状态也弹掉，
+                #   不然下一层循环会拿到上层的迭代器（嵌套时就乱了）。
+                if 层.get("是迭代"):
+                    self.发("POP_ITER")
                 位置 = self.发("JUMP", None)
                 层["出口们"].append(位置)
             else:
@@ -547,6 +572,10 @@ class VM:
         pc = 入口
         栈 = []
         处理栈 = []          # [(错误变量名, 进块时的栈高, handler 地址)]
+        # ★ Step 19：运行时迭代栈。每层 for 压一个 [序列, 下一个下标]。
+        #   为什么不用「逆序压栈逐个弹」的写法？因为「继续」和「跳出」要能
+        #   从中间插手 —— 游标式的写法比弹栈式好控制得多。
+        迭代栈 = []
 
         while True:
             try:
@@ -651,6 +680,31 @@ class VM:
                                 "星语：循环跑了 " + str(MAX_LOOP)
                                 + " 次还没停，先夹了（死循环？）")
                         pc = 目标
+
+                    # ---- 遍历循环（Step 19）----
+                    elif 操作 == "ITER_START":
+                        v = 栈.pop()
+                        # ★ 快照：先复制再遍历，循环体里改容器不影响这一轮
+                        if isinstance(v, dict):
+                            序列 = list(v.keys())
+                        elif isinstance(v, (list, str)):
+                            序列 = list(v)
+                        else:
+                            raise RuntimeError(
+                                "星语：遍历 只认列表、文本、字典，这是 "
+                                + fmt(v))
+                        迭代栈.append([序列, 0])
+                    elif 操作 == "ITER_NEXT":
+                        出口, 名 = 指令[1], 指令[2]
+                        当前 = 迭代栈[-1]
+                        if 当前[1] >= len(当前[0]):
+                            迭代栈.pop()
+                            pc = 出口
+                        else:
+                            环境.define(名, 当前[0][当前[1]])
+                            当前[1] += 1
+                    elif 操作 == "POP_ITER":
+                        迭代栈.pop()
 
                     # ---- 容器 ----
                     elif 操作 == "LIST":
