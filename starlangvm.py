@@ -32,7 +32,7 @@ import sys
 
 import starlang
 from starlang import (
-    Lexer, Parser, Environment, ReturnSignal, 内建, 内建函数,
+    Lexer, Parser, Environment, ReturnSignal, 内建, 内建函数, 内建常量,
     钩子表, 织入, 展开宏, 宏定义表, fmt, truthy, MAX_LOOP, MAX_MACRO_DEPTH,
 )
 
@@ -936,6 +936,10 @@ def 编译源码(源码, 基准目录=None):
     if "载入" in 源码:
         源码 = starlang.展开载入(源码, 基准目录)
 
+    # ★ Step 23：引入 "math" 这类行也在切词前吃掉（只登记名字，不改程序结构）
+    if "引入" in 源码:
+        源码 = starlang.展开引入(源码)
+
     tokens = Lexer(源码).tokenize()
     语句们 = Parser(tokens).parse_program()
 
@@ -958,6 +962,9 @@ def 跑(源码, 环境=None):
         for 名字 in 内建函数:
             if 名字 not in 环境.vars:
                 环境.define(名字, 内建(名字))
+        for 名字, 值 in 内建常量.items():
+            if 名字 not in 环境.vars:
+                环境.define(名字, 值)
     钩子表.clear()
     return VM(代码, 行号).执行(0, 环境)
 
@@ -981,6 +988,8 @@ def 跑文件(路径, 只看代码=False, 也跑=False):
     环境 = Environment()
     for 名字 in 内建函数:
         环境.define(名字, 内建(名字))
+    for 名字, 值 in 内建常量.items():
+        环境.define(名字, 值)
     钩子表.clear()
     return VM(代码, 行号).执行(0, 环境)
 

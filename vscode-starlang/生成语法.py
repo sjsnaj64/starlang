@@ -59,6 +59,9 @@ def 造语法():
             + list(starlang.BEFORE_WORDS) + list(starlang.AFTER_WORDS))
     布尔词 = list(starlang.BOOL_WORDS.keys()) + list(starlang.NULL_WORDS)
     内建名 = list(starlang.内建函数.keys())
+    # ★ Step 23：引入 / 载入 是【预处理指令】—— 词法器根本不认它们，
+    #   但编辑器里必须看得到，不然跟注释一样灰着。
+    预处理类 = ["引入", "载入"]
 
     关键字规则 = [
         规则("keyword.control.exception.starlang", 异常类),
@@ -69,6 +72,7 @@ def 造语法():
         规则("keyword.operator.word.starlang", 逻辑词),
         规则("keyword.other.macro.starlang", 造语法类),
         规则("keyword.other.hook.starlang", 钩子类),
+        规则("keyword.other.preprocess.starlang", 预处理类),
         规则("constant.language.boolean.starlang", 布尔词),
     ]
 

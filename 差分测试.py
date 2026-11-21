@@ -772,6 +772,9 @@ def 重置():
     starlang._gensym[0] = 0
     starlang._宏深度[0] = 0
     starlang._钩子栈.clear()
+    # ★ Step 23：引入 "math" 往 内建函数/内建常量 里塞了东西，
+    #   不撤掉的话会漏到下一个随机程序里 —— 那就不再是「干净的起跑线」了。
+    starlang.撤掉引入()
 
 
 def 抓输出(函数):
