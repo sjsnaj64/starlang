@@ -121,6 +121,7 @@ def 造语法():
             {"include": "#字符串"},
             {"include": "#标号"},
             {"include": "#数字"},
+            {"include": "#方法"},
             {"include": "#变量"},
             {"include": "#关键字"},
             {"include": "#内置函数"},
@@ -199,6 +200,21 @@ def 造语法():
                 "patterns": [规则("support.function.builtin.starlang", 内建名)]
             },
 
+            "方法": {
+                # ★ Step 21：话.长度() —— 点号后面的名字上一个「方法」色，
+                #   跟函数调用的颜色拉开一点，一眼看得出「这是在调它自己的方法」。
+                #   ⚠️ 后面必须跟 ( 才算，不然 3.14 里那个点也会被上色。
+                "patterns": [
+                    {
+                        "match": r"(\.)\s*([" + 字 + r"]+)\s*(?=\()",
+                        "captures": {
+                            "1": {"name": "punctuation.accessor.starlang"},
+                            "2": {"name": "support.function.method.starlang"},
+                        },
+                    },
+                ]
+            },
+
             "运算符": {
                 "patterns": [
                     {"name": "keyword.operator.comparison.starlang",
@@ -227,7 +243,8 @@ def 造语言配置():
     """
     开头会缩进的 = list(starlang.IF_WORDS) + list(starlang.WHILE_WORDS) \
         + list(starlang.FUNC_WORDS) + list(starlang.TRY_WORDS) \
-        + list(starlang.ELSE_WORDS) + list(starlang.CATCH_WORDS)
+        + list(starlang.ELSE_WORDS) + list(starlang.CATCH_WORDS) \
+        + list(starlang.FOR_WORDS) + list(starlang.ELSEIF_WORDS)
     # 「否则」「出错」这类要退一级（跟 if 对齐），不是往里缩
     要退一级的 = list(starlang.ELSE_WORDS) + list(starlang.CATCH_WORDS)
 

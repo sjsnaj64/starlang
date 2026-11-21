@@ -68,12 +68,12 @@
   ],
   "wordPattern": "[\\p{L}\\p{N}_]+",
   "indentationRules": {
-    "increaseIndentPattern": "\\{\\s*(?:#.*)?$|^\\s*(?:function|catch|while|loop|func|else|def|try|函数|尝试|如果|出事|if|假如|试试|定义|否则|要是|错了|重复|fn|不然|循环|出错|只要|若|当)(?![\\w])(?![^\\n]*\\{)",
-    "decreaseIndentPattern": "^\\s*(?:\\}|catch|else|否则|不然|出事|出错|错了)"
+    "increaseIndentPattern": "\\{\\s*(?:#.*)?$|^\\s*(?:function|elseif|catch|while|否则如果|elif|loop|不然如果|else|func|try|否则若|for|def|只要|试试|出事|不然|遍历|否则|尝试|错了|逐个|函数|出错|fn|如果|循环|要是|if|定义|假如|重复|对于|若|当)(?![\\w])(?![^\\n]*\\{)",
+    "decreaseIndentPattern": "^\\s*(?:\\}|catch|else|否则|出错|错了|出事|不然)"
   },
   "onEnterRules": [
     {
-      "beforeText": "^\\s*(?:function|catch|while|loop|func|else|def|try|函数|尝试|如果|出事|if|假如|试试|定义|否则|要是|错了|重复|fn|不然|循环|出错|只要|若|当)(?![\\w])(?![^\\n]*\\{).*$",
+      "beforeText": "^\\s*(?:function|elseif|catch|while|否则如果|elif|loop|不然如果|else|func|try|否则若|for|def|只要|试试|出事|不然|遍历|否则|尝试|错了|逐个|函数|出错|fn|如果|循环|要是|if|定义|假如|重复|对于|若|当)(?![\\w])(?![^\\n]*\\{).*$",
       "action": {
         "indent": "increaseIndent"
       }

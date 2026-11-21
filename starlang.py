@@ -31,6 +31,8 @@
              还自带快照（边遍历边改容器不会乱）
  Step 20：下标复合赋值 表[i] += 1 ✔
           —— 容器和下标只求值【一次】（表里()[0] += 1 不会调两次）
+ Step 21：方法调用 话.长度() ✔
+          —— 纯语法糖：就是 长度(话)。三个实现的求值逻辑一行都没改
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -313,6 +315,14 @@ class Lexer:
             # --- 字符串："双引号" 或 '单引号'（Step 6 新增）---
             if ch in ("\"", "'"):
                 tokens.append(self.read_string())
+                continue
+
+            # --- ★ Step 21：点号 —— 只管方法调用 话.长度() ---
+            #   ★ 为什么放在数字后面：这样 1.5 仍然进 read_number，
+            #     只有「名字/括号后面跟的点」才会当成方法调用。
+            if ch == ".":
+                tokens.append(Token(".", ".", self.pos))
+                self.pos += 1
                 continue
 
             # --- 两字符运算符：先看两格，命中就吃两格 ---
@@ -695,6 +705,10 @@ def 速查表():
     print("    = 赋值                  [ ] 列表    [键: 值] 字典    列表[0] 取下标")
     print("    += -= *= /= %= 复合赋值          遍历 项 于 表 / 字典")
     print("    # 注释                  @标号        \"文本\" / '文本'")
+    print()
+    print("  ── 方法写法 ──")
+    print("    话.长度()   ≡   长度(话)       ★ 方法名就是函数名，没有单独的命名空间")
+    print("    话.取段(0, 2).长度()          —— 能一路链下去")
 
     print()
     print("  ── 内置函数 ──")
@@ -1429,6 +1443,29 @@ class Parser:
                 下标 = self.expression()
                 self.expect("]")
                 node = ("index", node, 下标)
+                continue
+            # ★★ Step 21：方法调用 话.长度()  ≡  长度(话)
+            #
+            #   核心设计：【不造新节点】，直接变成普通函数调用。
+            #   好处是三个实现的求值逻辑一行都不用改 —— 不可能会分叉。
+            #   代价是「方法」仅仅是个写法，不是一个独立的命名空间：
+            #   名字里没有这个方法就是普通的「变量未定义」报错。
+            if self.cur.kind == ".":
+                self.advance()                 # 吃掉点号
+                if self.cur.kind != "NAME":
+                    raise SyntaxError(
+                        f"[语法错误] 第 {self.cur.line} 行: 点号后面要跟方法名，"
+                        f"比如 话.长度()")
+                方法 = self.advance().value
+                self.expect("(")
+                实参们 = []
+                if self.cur.kind != ")":
+                    实参们.append(self.expression())
+                    while self.cur.kind == ",":
+                        self.advance()
+                        实参们.append(self.expression())
+                self.expect(")")
+                node = ("call", ("var", 方法), [node] + 实参们)
                 continue
             break
         return node
