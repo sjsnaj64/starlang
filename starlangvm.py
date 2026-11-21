@@ -233,6 +233,12 @@ class 字节码编译器:
             self.发("INDEX")
             return
 
+        if k == "attr":                    # ★ Step 26：模块.名字
+            self.编式(n[1])
+            self.发("ATTR", n[2])
+            return
+
+
         if k == "call":
             self.编式(n[1])                    # 先压函数值，再压实参
             for a in n[2]:
@@ -824,6 +830,10 @@ class VM:
                     elif 操作 == "MAKE_FUNC":
                         栈.append(VM函数(指令[1], 指令[2], 指令[3], 环境,
                                          指令[4] if len(指令) > 4 else None))
+                    elif 操作 == "ATTR":
+                        # ★ Step 26：取值和报错都交给 starlang.属性取值，
+                        #   跟解释器/编译器共用同一份 —— 说法不可能分叉。
+                        栈.append(starlang.属性取值(栈.pop(), 指令[1]))
                     elif 操作 == "CALL":
                         n = 指令[1]
                         实参 = 栈[-n:] if n else []

@@ -53,6 +53,11 @@
              所以它【能进差分测试】；换成 Python 的 random 就永远对不上
           —— 四舍五入走 Decimal，2.5 进到 3（不是 Python round 的银行家舍入）
           —— 时间那几条内置（纯星语拿不到系统时钟），不确定，demo 里只验形状
+ Step 26：引入的模块可以用点号  math.sqrt(16) ✔
+          —— 靠的是【解析期】就能分辨：引入 是预处理，切词前就已经知道
+             有哪些模块前缀了（引入前缀们 集合）
+             所以只对模块名生成新的 attr 节点，普通值的 话.长度() 一个字没动
+          —— 模块.常量 也能取（math.pi 不带括号）
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -732,6 +737,8 @@ def 速查表():
     print("  ── 方法写法 ──")
     print("    话.长度()   ≡   长度(话)       ★ 方法名就是函数名，没有单独的命名空间")
     print("    话.取段(0, 2).长度()          —— 能一路链下去")
+    print("    math.sqrt(16)                —— 但【引入的模块】是真属性访问")
+    print("    math.pi                      —— 模块的常量不带括号也能取")
 
     print()
     print("  ── 标号（行尾 @名字）──")
@@ -1500,11 +1507,14 @@ class Parser:
                 node = ("index", node, 下标)
                 continue
             # ★★ Step 21：方法调用 话.长度()  ≡  长度(话)
+            # ★★ Step 26：但如果是【引入进来的模块】，走真属性访问。
             #
-            #   核心设计：【不造新节点】，直接变成普通函数调用。
-            #   好处是三个实现的求值逻辑一行都不用改 —— 不可能会分叉。
-            #   代价是「方法」仅仅是个写法，不是一个独立的命名空间：
-            #   名字里没有这个方法就是普通的「变量未定义」报错。
+            #   为什么能在【解析期】就分开？因为 引入 是预处理 ——
+            #   切词之前就已经知道 math / js 这些前缀了（引入前缀们 集合）。
+            #   所以：
+            #       引入 "math"  →  math.sqrt(16)  → ("call", ("attr",…), […])
+            #       普通值       →  话.长度()      → 老路（语法糖，一个字不变）
+            #   两套机制互不干扰，普通点号的现有行为【零风险】。
             if self.cur.kind == ".":
                 self.advance()                 # 吃掉点号
                 if self.cur.kind != "NAME":
@@ -1512,6 +1522,11 @@ class Parser:
                         f"[语法错误] 第 {self.cur.line} 行: 点号后面要跟方法名，"
                         f"比如 话.长度()")
                 方法 = self.advance().value
+                是模块 = (node[0] == "var" and node[1] in 引入前缀们)
+                if 是模块:
+                    # 模块：不强制带括号 —— math.pi 这种常量也要能取
+                    node = ("attr", node, 方法)
+                    continue
                 self.expect("(")
                 实参们 = []
                 if self.cur.kind != ")":
@@ -2742,6 +2757,10 @@ def evaluate(node, env):
         return {evaluate(k, env): evaluate(v, env) for k, v in node[1]}
     if kind == "index":
         return 取下标(evaluate(node[1], env), evaluate(node[2], env))
+    if kind == "attr":                       # ★ Step 26：模块.名字
+        # 只有 引入 进来的模块才走得到这儿（解析期就分好了）。
+        # 报错和取值的逻辑全在 属性取值() 里，三家共用。
+        return 属性取值(evaluate(node[1], env), node[2])
 
     # ---- 函数调用（Step 4 新增）----
     # ⚠️ 必须在下面「二元节点」之前处理！
@@ -3374,10 +3393,42 @@ import re                                    # noqa: E402
 
 内建常量 = {}      # 名字 -> Python 值（模块里的常量，比如 math_pi）
 _引入名 = set()    # 这次引入进来的名字，方便 撤掉引入()
+引入前缀们 = set()  # ★ 引入的模块【前缀名】集合，比如 {"math", "js"}
 
 引入行式 = re.compile(
     r"^([ \t]*)引入[ \t]+[\"']([^\"']+)[\"']"
     r"(?:[ \t]+当[ \t]+([^\s#]+))?[ \t]*(?:#.*)?$")
+
+
+class 外来模块:
+    """`引入 "math"` 之后，`math` 这个名字拿到的就是它。
+
+    ★ 为什么得要个包装，不能直接把 Python 模块丢进去？
+      因为「这是外来模块」这个身份本身就是个语义信号：
+      只有它才允许用 `math.sqrt(16)` 这种真属性访问；
+      普通值的 `话.长度()` 还得走老的「语法糖」路子。
+    """
+
+    def __init__(self, 名字, 模块):
+        self.名字 = 名字
+        self.模块 = 模块
+
+    def __repr__(self):
+        return "<模块 " + self.名字 + ">"
+
+
+def 属性取值(对象, 名字):
+    """`模块.名字` 的取值。★ 三家共用这一句，报错说法必须一致。"""
+    if isinstance(对象, 外来模块):
+        try:
+            return getattr(对象.模块, 名字)
+        except AttributeError:
+            raise RuntimeError(
+                "星语：模块「" + 对象.名字 + "」里没有「" + 名字
+                + "」这个东西（名字得跟 Python 里一模一样）") from None
+    raise RuntimeError(
+        "星语：" + fmt(对象) + " 这种值没有 ." + 名字
+        + "（真属性访问只给 引入 进来的模块用；普通值请写 函数(值)）")
 
 
 def _包外部(全名, 函数):
@@ -3409,6 +3460,14 @@ def 注册模块(模块名, 别名=None):
     import importlib
     模块 = importlib.import_module(模块名)
     前缀 = 别名 if 别名 else 模块名.split(".")[-1]
+
+    # ★★ 关键：前缀名本身也绑成一个【外来模块】对象。
+    #   有了它，`math.sqrt(16)` 这种真属性访问才有个落脚点；
+    #   同时解析器靠 引入前缀们 提前知道「math 是个模块名」。
+    内建常量[前缀] = 外来模块(前缀, 模块)
+    引入前缀们.add(前缀)
+    _引入名.add(前缀)
+
     几个函数 = 0
     几个常量 = 0
     for 名 in dir(模块):
@@ -3465,6 +3524,7 @@ def 撤掉引入():
         内建函数.pop(名, None)
         内建常量.pop(名, None)
     _引入名.clear()
+    引入前缀们.clear()          # ★ 前缀也清，不然下一个程序的解析会误判
 
 
 def 引入报告():
@@ -3767,6 +3827,8 @@ def node_parts(node):
         return "字典（" + str(len(node[1])) + " 对）", kids
     if kind == "index":
         return "取下标", [("从", node[1]), ("第几个", node[2])]
+    if kind == "attr":                       # ★ Step 26：模块.名字
+        return "取属性「" + node[2] + "」", [("从", node[1])]
     if kind == "setindex":
         return "改下标", [("在", node[1]), ("第几个", node[2]), ("改成", node[3])]
 

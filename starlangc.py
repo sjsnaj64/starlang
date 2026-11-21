@@ -261,6 +261,11 @@ class 编译器:
         if k == "index":
             return "_下标(" + self.式(n[1]) + ", " + self.式(n[2]) + ")"
 
+        if k == "attr":                    # ★ Step 26：模块.名字
+            # 取值 + 报错全交给 starlang.属性取值，跟解释器/VM 共用一份
+            return "_属性取值(" + self.式(n[1]) + ", " + repr(n[2]) + ")"
+
+
         # ---- 调用 ----
         if k == "call":
             实 = [self.式(a) for a in n[2]]
@@ -901,6 +906,8 @@ import starlang as _sl
 _内建实现 = _sl.内建函数
 # ★ Step 23：引入进来的模块常量也走同一张表（math_pi / np_e 这些）
 _内建常量 = _sl.内建常量
+# ★ Step 26：`模块.名字` 的取值逻辑，三家共用 starlang.属性取值()
+_属性取值 = _sl.属性取值
 # ★ 默认参数的哨兵直接借解释器那个单例 —— 两边共用同一个对象，
 #   所以 is 判等不会出错。
 _缺省 = _sl.缺省
