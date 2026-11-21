@@ -50,6 +50,7 @@ for _流 in (sys.stdout, sys.stderr):
     ("展开    副本跟原文等价",     ["验证展开.py"],                False, r"通过 (\d+) / (\d+)"),
     ("高亮    不启动 VS Code 验",  ["vscode-starlang/验证高亮.py"], False, r"通过 (\d+) / (\d+)"),
     ("库      星语 ⇄ Python",     ["验证库.py"],                  False, r"通过 (\d+) 项"),
+    ("手册    每个例子都真跑",     ["验证手册.py"],                False, r"代码通过 (\d+) / (\d+)"),
     ("差分    1000 个随机程序",    ["差分测试.py", "--个数", "1000"], False, r"通过 (\d+) / (\d+)"),
     ("缩减器  自测",              ["缩减.py", "--自测"],           True,  None),
     ("缩减器  注入 bug 能不能缩",  ["验证缩减.py"],                True,  None),

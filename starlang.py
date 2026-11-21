@@ -2013,7 +2013,9 @@ def _类型(实参):
     if v is None:
         return "空"
     if isinstance(v, bool):          # ★ 必须在 int 前面：Python 里 bool 是 int 的子类
-        return "布"
+        # ★ 以前这里返回「布」（历史遗留的缩写），跟关键字表里的「真/假」对不上。
+        #   写手册时才发现：读者看到 类型(真) 给出个「布」字，会一脸问号。
+        return "真假"
     if isinstance(v, (int, float)):
         return "数"
     if isinstance(v, str):
