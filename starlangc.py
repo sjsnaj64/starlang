@@ -379,7 +379,23 @@ class 编译器:
             self.语句表(s[1], False)
 
         elif k == "labeled":
-            self.语句(s[2], 回显)
+            内 = s[2]
+            if 内[0] in ("while", "for"):
+                # ★ 带标号的循环：「跳出 这个标号」会抛 _跳出标号，在这里接住
+                错 = self.新名("标号错")
+                self.写("try:")
+                self.深 += 1
+                self.语句(s[2])
+                self.深 -= 1
+                self.写("except _跳出标号 as " + 错 + ":")
+                self.深 += 1
+                self.写("if " + 错 + ".标签 != " + repr(s[1]) + ":")
+                self.深 += 1
+                self.写("raise")          # 不是找我的，继续往外冒
+                self.深 -= 1
+                self.深 -= 1
+            else:
+                self.语句(s[2], 回显)
 
         elif k == "insert":
             raise RuntimeError("星语编译器：「插入」应该在编译前就被织入掉")
@@ -434,7 +450,12 @@ class 编译器:
         elif k in ("break", "continue"):
             if self.循环深度 == 0:
                 raise SyntaxError(self.跳出错误(s, "跳出" if k == "break" else "继续"))
-            self.写("break" if k == "break" else "continue")
+            # ★ Step 22：带标号的跳出
+            标签 = s[1] if len(s) > 1 else None
+            if k == "break" and 标签 is not None:
+                self.写("raise _跳出标号(" + repr(标签) + ")")
+            else:
+                self.写("break" if k == "break" else "continue")
 
         elif k == "funcdef":
             self.编译函数定义(s)
@@ -449,6 +470,12 @@ class 编译器:
             self.写("try:")
             self.深 += 1
             self.语句表(s[1][1])
+            self.深 -= 1
+            # ★ Step 22：带标号的跳出不能当成「出错」吃掉 —— 必须原样往外冒。
+            #   跟解释器里 BreakSignal 单独重抛是一个道理。
+            self.写("except _跳出标号:")
+            self.深 += 1
+            self.写("raise")
             self.深 -= 1
             错 = self.新名("错")
             self.写("except Exception as " + 错 + ":")
@@ -685,6 +712,20 @@ def _循环速(v):
     if isinstance(v, (list, str)):
         return list(v)
     raise RuntimeError("星语：遍历 只认列表、文本、字典，这是 " + _fmt(v))
+
+
+class _跳出标号(Exception):
+    """「跳出 某标号」的专用信号。
+
+    ★ Step 22。为什么用异常而不是「标志变量 + 每层检查」？
+      标志变量的问题：跳出后 break 只退一层，外层循环体剩下的语句
+      还会继续跑完 —— 跟解释器对不上。异常一抛就直接到了标号那里，
+      中间一句话都不多跑。
+    """
+
+    def __init__(self, 标签):
+        super().__init__()
+        self.标签 = 标签
 
 
 def _还名(p):

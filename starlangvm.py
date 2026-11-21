@@ -92,6 +92,18 @@ except Exception:
 }
 
 
+class _跳出标号(Exception):
+    """「跳出 某标号」的专用信号（Step 22）。
+
+    ★ 用 Python 异常穿过整个 VM 主循环，比「标志变量 + 每层检查」干净：
+      后者会让外层循环体剩下的语句多跑一遍，跟解释器对不上。
+    """
+
+    def __init__(self, 标签):
+        super().__init__()
+        self.标签 = 标签
+
+
 class VM函数:
     """VM 里的函数值。★ 跟 starlang.Func 长得像，但 body 不是 AST，是入口地址。"""
 
@@ -356,7 +368,18 @@ class 字节码编译器:
             self.编块(s, False)
 
         elif k == "labeled":
-            self.编句(s[2], 回显)
+            内 = s[2]
+            if 内[0] in ("while", "for"):
+                # ★ 带标号的循环：「跳出 这个标号」会抛 _跳出标号，在这层接住
+                #   参数顺序：handler 放 [1]，回填() 只改指令[1]。
+                位置 = self.发("SETUP_LABEL", None, s[1])
+                self.编句(s[2])
+                self.发("POP_LABEL")
+                跳过 = self.发("JUMP", None)
+                self.回填(位置, self.这里())      # handler 就是这儿
+                self.回填(跳过, self.这里())
+            else:
+                self.编句(s[2], 回显)
 
         elif k == "if":
             self.编式(s[1])
@@ -412,6 +435,11 @@ class 字节码编译器:
         elif k in ("break", "continue"):
             if not self.循环栈:
                 raise SyntaxError(self.跳出错误(s, "跳出" if k == "break" else "继续"))
+            标签 = s[1] if len(s) > 1 else None
+            if k == "break" and 标签 is not None:
+                # ★ 带标号的跳出：抛给 SETUP_LABEL 那层接
+                self.发("BREAK_TAG", 标签)
+                return
             层 = self.循环栈[-1]
             # ★★ 先把穿过的那几层 try 收拾干净。
             #   只算「循环体内部」的层数 —— 循环自己如果本来就套在某个
@@ -603,6 +631,9 @@ class VM:
         #   为什么不用「逆序压栈逐个弹」的写法？因为「继续」和「跳出」要能
         #   从中间插手 —— 游标式的写法比弹栈式好控制得多。
         迭代栈 = []
+        # ★ Step 22：标签栈 [(标号名, 进块时的栈高, handler 地址)]
+        #   跟 处理栈 一个模子，只不过接的是 _跳出标号 而不是普通错误。
+        标签栈 = []
 
         while True:
             try:
@@ -733,6 +764,16 @@ class VM:
                     elif 操作 == "POP_ITER":
                         迭代栈.pop()
 
+                    # ---- 带标号的跳出（Step 22）----
+                    elif 操作 == "SETUP_LABEL":
+                        # ★ 除了值栈高，还得记下【处理栈】此刻有多深 ——
+                        #   跳出时要顺着它把穿过的 尝试/出错 一并撒掉。
+                        标签栈.append((指令[2], len(栈), len(处理栈), 指令[1]))
+                    elif 操作 == "POP_LABEL":
+                        标签栈.pop()
+                    elif 操作 == "BREAK_TAG":
+                        raise _跳出标号(指令[1])
+
                     # ---- 容器 ----
                     elif 操作 == "LIST":
                         n = 指令[1]
@@ -837,6 +878,27 @@ class VM:
 
             except ReturnSignal:
                 raise
+            except _跳出标号 as e:
+                # ★ 从内往外找「名字对得上」的那一层标签。
+                #   路上不匹配的层说明异常已经穿过它们了，一并收拾掉（弹栈 + 清值栈）。
+                #   全都没对上就说明这程序少了个标号（静态检查本该拦住）。
+                找到了 = False
+                while 标签栈:
+                    名, 栈高, 处深, 目标 = 标签栈[-1]
+                    标签栈.pop()
+                    del 栈[栈高:]
+                    if 名 == e.标签:
+                        # ★ 关键：穿过的 尝试/出错 也得从处理栈上摘掉。
+                        #   不定这一步，它们会一直赖在栈上，等程序后面
+                        #   随便哪个不相干的错误上门时突然“开火” ——
+                        #   表现就是莫名多了几行「出错」分支里的输出。
+                        del 处理栈[处深:]
+                        pc = 目标
+                        找到了 = True
+                        break
+                if not 找到了:
+                    raise RuntimeError(
+                        starlang.最终文案(e, self.当前行)) from None
             except Exception as e:
                 # ★ 行号不再每条指令都存一次，而是出错时才拿 pc 反查 ——
                 #   省下每指令一次列表索引 + 一次属性赋值。

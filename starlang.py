@@ -33,6 +33,11 @@
           —— 容器和下标只求值【一次】（表里()[0] += 1 不会调两次）
  Step 21：方法调用 话.长度() ✔
           —— 纯语法糖：就是 长度(话)。三个实现的求值逻辑一行都没改
+ Step 22：带标号的跳出 跳出 标号 ✔
+          —— 只要 真 @外层 … 跳出 外层，多重循环一次退干净
+             标号复用行尾的 @名字（跟「插入」同一套），不新增语法
+             三家的穿透机制完全不同：解释器靠异常、编译器靠自定义异常、
+             VM 靠「标签栈 + 处理栈深度」，正好互相印证
 ============================================================
 
 任何语言（Python / JS / C++）跑起来，流水线永远长这样：
@@ -684,6 +689,7 @@ def 速查表():
     组(行, "真 / 假", tuple(BOOL_WORDS), "布尔字面量")
     组(行, "空", NULL_WORDS, "空值（读到输入结束时就是它）")
     组(行, "跳出", BREAK_WORDS, "立刻结束这一层循环")
+    组(行, "  带标号", ("跳出 名字",), "一口气退到那个 @名字 那儿（多重循环救星）")
     组(行, "继续", CONTINUE_WORDS, "跳过这一圈剩下的，直接进下一圈")
     组(行, "遍历", FOR_WORDS, "遍历 项 于 表 —— 每个元素过一遍")
     组(行, "  连词", IN_WORDS, "夹在变量名和表中间")
@@ -709,6 +715,13 @@ def 速查表():
     print("  ── 方法写法 ──")
     print("    话.长度()   ≡   长度(话)       ★ 方法名就是函数名，没有单独的命名空间")
     print("    话.取段(0, 2).长度()          —— 能一路链下去")
+
+    print()
+    print("  ── 标号（行尾 @名字）──")
+    print("    只要 真 @外层                 —— 给循环挂个铭牌")
+    print("        只要 真")
+    print("            跳出 外层              —— 两层一起退，不用挂标志变量")
+    print("    遍历 项 于 表 @扫表            —— 遍历 也能挂")
 
     print()
     print("  ── 内置函数 ──")
@@ -967,7 +980,13 @@ class Parser:
             #   就永远不会被发现，而编译器一步就查得出来，两边又不一致了。
             if t.value in BREAK_WORDS:
                 self.advance()
-                return ("break",)
+                # ★ Step 22：后面紧跟一个名字 = 我要跳到【那个标号】去
+                #   （标号就是行尾 `@名字` 写的那个，跟 插入 用的是同一套）
+                标签 = None
+                if self.cur.kind == "NAME" and self.cur.value not in 全部关键字:
+                    标签 = self.cur.value
+                    self.advance()
+                return ("break", 标签)
             if t.value in CONTINUE_WORDS:
                 self.advance()
                 return ("continue",)
@@ -1103,8 +1122,12 @@ class Parser:
     def while_statement(self):
         self.advance()                         # 吃掉 while / 当
         cond = self.expression()
+        # ★ Step 22：允许 `只要 条件 @标号` —— 这个标号可以当「跳出」的目标。
+        #   为什么得在这里特判？因为普通标号是写在【语句后面】的（maybe_label），
+        #   而 只要 后面还要跟一个块 —— 标号刚好卡在中间。
+        标 = self.可选标号()
         body = self.block()
-        return ("while", cond, body)
+        return self.包标号(标, ("while", cond, body))
 
     def for_statement(self):
         """遍历 项 于 表    —— 每个元素过一遍"""
@@ -1122,7 +1145,22 @@ class Parser:
                 f"「于」（或「在」），这里读到的却是 {实际!r}")
         self.advance()                         # 吃掉 于 / 在 / in
         容器 = self.expression()
-        return ("for", 名, 容器, self.block())
+        标 = self.可选标号()
+        return self.包标号(标, ("for", 名, 容器, self.block()))
+
+    def 可选标号(self):
+        """条件后面可以紧跟着一个 `@名字`"""
+        if self.cur.kind == "LABEL":
+            return self.advance().value
+        return None
+
+    def 包标号(self, 标, 节点):
+        """有标号就包一层 labeled（标号不改变执行，只给「跳出 名字」当靶子）"""
+        if 标 is None:
+            return 节点
+        壳 = ("labeled", 标, 节点)
+        语句行表[id(壳)] = 语句行表.get(id(节点), 0)
+        return 壳
 
     # ---------- 函数（Step 4 新增）----------
     def funcdef_statement(self):
@@ -2084,9 +2122,15 @@ class BreakSignal(Exception):
             如果 x > 3
                 尝试 { 跳出 } 出错 错 { … }
 
-    层层 return 上去太繁琐，直接抛穿最干净 —— 只被 while 接住。
-    跳出去的时候顺手带上栈信息，好让报错指到对的行。
+    层层 return 上去太繁琐，直接抛穿最干净 —— 只被循环接住。
+
+    ★ Step 22：带标号版。标签 为 None 就是普通「跳出」（只退一层）；
+      有名字就一直冒到「挂着这个标号的语句」那里去。
     """
+
+    def __init__(self, 标签=None):
+        super().__init__()
+        self.标签 = 标签
 
 
 class ContinueSignal(Exception):
@@ -2652,7 +2696,16 @@ def execute(stmt, env):
 
     # ---- 标号与插入（Step 5 新增）----
     if kind == "labeled":
-        return execute(stmt[2], env)      # 标号只是个铭牌，不影响执行
+        # 标号平时只是个铭牌（不影响执行）。
+        # ★ Step 22：但如果有「跳出 这个标号」从里面冒出来，就由我接下。
+        #   这也意味着标号不限于循环 —— 包着 如果/块 一样能当跳出目标。
+        名 = stmt[1]
+        try:
+            return execute(stmt[2], env)
+        except BreakSignal as s:
+            if s.标签 == 名:
+                return None
+            raise
     if kind == "insert":
         # 正常情况下织入阶段已经把它抹掉了；到这儿说明织入没跑
         raise RuntimeError("星语：「插入」应该在跑之前就被织入掉，不该留到这里")
@@ -2750,7 +2803,11 @@ def execute(stmt, env):
                 )
             try:
                 execute(stmt[2], env)
-            except BreakSignal:
+            except BreakSignal as s:
+                # ★ 带标号的跳出不属于我 —— 继续往外冒，
+                #   交给外层挂着那个标号的语句去接。
+                if s.标签 is not None:
+                    raise
                 break                       # 「跳出」→ 整个循环结束
             except ContinueSignal:
                 continue                    # 「继续」→ 直接看下一圈条件
@@ -2775,7 +2832,9 @@ def execute(stmt, env):
             env.set(名, 项)
             try:
                 execute(体, env)
-            except BreakSignal:
+            except BreakSignal as s:
+                if s.标签 is not None:      # 带标号的：不归我管，往外冒
+                    raise
                 break
             except ContinueSignal:
                 continue
@@ -2786,7 +2845,7 @@ def execute(stmt, env):
     # 而套在循环里的就一定被上面的 while 接住。漏到这里就是实现有 bug，
     # 报出来比默默往下跑强。
     if kind == "break":
-        raise BreakSignal()
+        raise BreakSignal(stmt[1] if len(stmt) > 1 else None)
     if kind == "continue":
         raise ContinueSignal()
 
@@ -3001,7 +3060,7 @@ def 织入(程序):
 # ═══════════════════════════════════════════════════════════
 # Step 14 ①：跳出 / 继续 的合法性静态检查
 # ═══════════════════════════════════════════════════════════
-def 检查跳出(语句们, 循环深度=0):
+def 检查跳出(语句们, 循环深度=0, 标签们=None):
     """扫一遍 AST，确认每个「跳出 / 继续」都套在循环里。
 
     ★★ 为什么非要静态查，明明执行的时候也能发现？
@@ -3018,7 +3077,11 @@ def 检查跳出(语句们, 循环深度=0):
 
     ★ 函数定义里的跳出不算外层循环的 —— 换个函数就是新的一层。
       （所以遇到 funcdef 要把深度清零重来）
+
+    ★ Step 22：带标号的「跳出 名字」还得检查那个标号真的存在。
     """
+    标签们 = set() if 标签们 is None else 标签们
+
     for s in 语句们:
         if not isinstance(s, tuple):
             continue
@@ -3033,34 +3096,48 @@ def 检查跳出(语句们, 循环深度=0):
                     开头 + "「" + 词 + "」得写在循环（只要）里面 —— "
                     "它自己不知道要跳出哪一层"
                 )
+            # ★ 带标号的还得确认标号存在，不然运行时就像石头掉进井里
+            标签 = s[1] if len(s) > 1 else None
+            if 标签 is not None and 标签 not in 标签们:
+                行 = 语句行表.get(id(s))
+                开头 = ("[语法错误] 第 " + str(行) + " 行: ") if 行 else "[语法错误] "
+                有没有 = ("现在的标号只有：" + "、".join(sorted(标签们))
+                         if 标签们 else "一个标号都没写")
+                raise SyntaxError(
+                    开头 + "「" + 标签 + "」这个标号在哪呢？"
+                    + 有没有 + "（标号就是行尾的 @名字）"
+                )
 
         elif k == "while":
-            检查跳出(s[2][1], 循环深度 + 1)
+            检查跳出(s[2][1], 循环深度 + 1, 标签们)
 
         elif k == "for":
             # ★ 遍历 也是循环 —— 里面的「跳出/继续」同样合法
-            检查跳出(s[3][1], 循环深度 + 1)
+            检查跳出(s[3][1], 循环深度 + 1, 标签们)
 
         elif k == "if":
-            检查跳出(s[2][1], 循环深度)
+            检查跳出(s[2][1], 循环深度, 标签们)
             if s[3] is not None:
                 if s[3][0] == "if":
-                    检查跳出([s[3]], 循环深度)
+                    检查跳出([s[3]], 循环深度, 标签们)
                 else:
-                    检查跳出(s[3][1], 循环深度)
+                    检查跳出(s[3][1], 循环深度, 标签们)
 
         elif k == "block":
-            检查跳出(s[1], 循环深度)
+            检查跳出(s[1], 循环深度, 标签们)
 
         elif k == "labeled":
-            检查跳出([s[2]], 循环深度)
+            # ★ 挂着标号的语句，里面的「跳出 这个标号」就以它为目标
+            检查跳出([s[2]], 循环深度, 标签们 | {s[1]})
 
         elif k == "try":
-            检查跳出(s[1][1], 循环深度)
-            检查跳出(s[3][1], 循环深度)
+            检查跳出(s[1][1], 循环深度, 标签们)
+            检查跳出(s[3][1], 循环深度, 标签们)
 
         elif k == "funcdef":
-            检查跳出(s[3][1], 0)          # ★ 函数体重新数
+            # ★ 函数体重新数：深度清零，标号也清零
+            #   （外面的标号跟函数体没关系 —— 「跳出 外面」不能穿函数）
+            检查跳出(s[3][1], 0, set())
 
         elif k == "macro":
             # 编译器/VM 是在编译中途才展开宏的，走到这儿说明还没展开过。
@@ -3070,7 +3147,7 @@ def 检查跳出(语句们, 循环深度=0):
             #    （这坑踩过：4 个 demo 同时红，报的却是「宏还没定义」）。
             if s[1] in 宏定义表:
                 try:
-                    检查跳出(展开宏(s[1], s[2]), 循环深度)
+                    检查跳出(展开宏(s[1], s[2]), 循环深度, 标签们)
                 except Exception:
                     # 展开本身有错不归这儿管 —— 交给真正的编译器去报，
                     # 它报得比这里准（还能带上宏参数类型那些细节）。
